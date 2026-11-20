@@ -1,0 +1,36 @@
+.marquee-container {
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  width: 100%;
+  display: block;
+}
+
+.marquee-container.overflowing {
+  mask-image: linear-gradient(to right, transparent 0%, black 8px, black calc(100% - 10px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 8px, black calc(100% - 10px), transparent 100%);
+}
+
+.marquee-text {
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.marquee-text.animate {
+  animation: marqueePingPong var(--marquee-duration, 8s) ease-in-out infinite;
+}
+
+@keyframes marqueePingPong {
+  0%,
+  22% {
+    transform: translateX(0);
+  }
+  58%,
+  80% {
+    transform: translateX(calc(-1 * var(--overflow-dist, 30px)));
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
