@@ -30,11 +30,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "app", "dmg"],
     "copyright": "Copyright © 2026 Patrick J. Hernandez",
     "publisher": "Patrick J. Hernandez",
-    "shortDescription": "Controlador multimedia flotante para Windows 11",
+    "shortDescription": "Controlador multimedia flotante",
     "longDescription": "Banana Music Controller - Desarrollado por Patrick J. Hernandez",
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",

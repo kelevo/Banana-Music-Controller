@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "clean:port": "powershell -NoProfile -Command \"Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }\"",
+    "clean:port": "node scripts/clean-port.js",
     "dev": "vite",
     "dev:ui": "vite",
     "dev:back": "tauri dev --no-dev-server",

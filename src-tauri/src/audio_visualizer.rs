@@ -38,9 +38,83 @@ pub fn start_audio_visualizer(app_handle: AppHandle) {
             .expect("Failed to spawn wasapi-audio-visualizer thread");
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        std::thread::Builder::new()
+            .name("macos-audio-visualizer".to_string())
+            .spawn(move || {
+                run_macos_visualizer_loop(app_handle);
+            })
+            .expect("Failed to spawn macos-audio-visualizer thread");
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
         let _ = app_handle;
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn run_macos_visualizer_loop(app_handle: AppHandle) {
+    let mut smoothed_bass = 0.0f32;
+    let mut smoothed_mid = 0.0f32;
+    let mut smoothed_treble = 0.0f32;
+
+    let mut last_emit = Instant::now();
+    let emit_interval = Duration::from_millis(28); // ~35 Hz
+    let mut phase: f32 = 0.0;
+
+    while IS_VISUALIZER_RUNNING.load(Ordering::SeqCst) {
+        // Consultar estado de reproducción para reactividad armónica
+        let is_playing = if let Ok(state) = crate::media_controller::get_media_state() {
+            state.status == crate::media_controller::PlaybackStatus::Playing
+        } else {
+            false
+        };
+
+        if is_playing {
+            phase += 0.14;
+            if phase > std::f32::consts::PI * 2.0 {
+                phase -= std::f32::consts::PI * 2.0;
+            }
+
+            // Pulso dinámico que modula bombo/bajo y frecuencias medias
+            let beat = (phase.sin().powi(2) * 0.75 + (phase * 2.0).cos().abs() * 0.25).clamp(0.0, 1.0);
+            let raw_bass = (beat * 0.88).min(1.0);
+            let raw_mid = (beat * 0.62).min(1.0);
+            let raw_treble = ((phase * 3.0).sin().abs() * 0.45).min(1.0);
+
+            let b_rate = if raw_bass > smoothed_bass { 0.85 } else { 0.16 };
+            let m_rate = if raw_mid > smoothed_mid { 0.70 } else { 0.18 };
+            let t_rate = if raw_treble > smoothed_treble { 0.70 } else { 0.18 };
+
+            smoothed_bass += (raw_bass - smoothed_bass) * b_rate;
+            smoothed_mid += (raw_mid - smoothed_mid) * m_rate;
+            smoothed_treble += (raw_treble - smoothed_treble) * t_rate;
+        } else {
+            // Decaimiento natural al pausar o parar
+            smoothed_bass *= 0.80;
+            smoothed_mid *= 0.80;
+            smoothed_treble *= 0.80;
+        }
+
+        if last_emit.elapsed() >= emit_interval {
+            last_emit = Instant::now();
+
+            let b_val = if smoothed_bass < 0.015 { 0.0 } else { smoothed_bass.min(1.0) };
+            let m_val = if smoothed_mid < 0.015 { 0.0 } else { smoothed_mid.min(1.0) };
+            let t_val = if smoothed_treble < 0.015 { 0.0 } else { smoothed_treble.min(1.0) };
+
+            let bands = AudioBands {
+                bass: (b_val * 100.0).round() / 100.0,
+                mid: (m_val * 100.0).round() / 100.0,
+                treble: (t_val * 100.0).round() / 100.0,
+            };
+
+            let _ = app_handle.emit("audio-bands-update", &bands);
+        }
+
+        std::thread::sleep(Duration::from_millis(25));
     }
 }
 
