@@ -56,47 +56,114 @@ pub fn start_audio_visualizer(app_handle: AppHandle) {
 
 #[cfg(target_os = "macos")]
 fn run_macos_visualizer_loop(app_handle: AppHandle) {
+    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicU32;
+
+    let bass_accum = Arc::new(AtomicU32::new(0));
+    let mid_accum = Arc::new(AtomicU32::new(0));
+    let treble_accum = Arc::new(AtomicU32::new(0));
+    let count_accum = Arc::new(AtomicU32::new(0));
+
+    let b_acc = bass_accum.clone();
+    let m_acc = mid_accum.clone();
+    let t_acc = treble_accum.clone();
+    let c_acc = count_accum.clone();
+
+    // Captura de audio nativo mediante CoreAudio (cpal)
+    let _stream = (|| -> Option<cpal::Stream> {
+        let host = cpal::default_host();
+        let device = host.default_input_device()?;
+        let config = device.default_input_config().ok()?;
+
+        let sample_rate = config.sample_rate().0 as f32;
+        let channels = config.channels() as usize;
+        let dt = 1.0 / sample_rate.max(44100.0);
+        let alpha_bass = (2.0 * std::f32::consts::PI * 150.0 * dt).min(0.45);
+        let alpha_mid = (2.0 * std::f32::consts::PI * 2200.0 * dt).min(0.8);
+
+        let mut lp_bass = 0.0f32;
+        let mut lp_mid = 0.0f32;
+
+        let err_fn = |err| eprintln!("audio stream error: {}", err);
+
+        let stream = match config.sample_format() {
+            cpal::SampleFormat::F32 => device.build_input_stream(
+                &config.into(),
+                move |data: &[f32], _: &_| {
+                    let mut b_e = 0.0f32;
+                    let mut m_e = 0.0f32;
+                    let mut t_e = 0.0f32;
+                    let mut count = 0u32;
+
+                    for frame in data.chunks(channels) {
+                        let sample: f32 = frame.iter().sum::<f32>() / (channels as f32);
+                        lp_bass += alpha_bass * (sample - lp_bass);
+                        lp_mid += alpha_mid * (sample - lp_mid);
+
+                        let bass_s = lp_bass;
+                        let mid_s = lp_mid - lp_bass;
+                        let treble_s = sample - lp_mid;
+
+                        b_e += bass_s * bass_s;
+                        m_e += mid_s * mid_s;
+                        t_e += treble_s * treble_s;
+                        count += 1;
+                    }
+
+                    if count > 0 {
+                        b_acc.fetch_add((b_e * 1000.0) as u32, Ordering::Relaxed);
+                        m_acc.fetch_add((m_e * 1000.0) as u32, Ordering::Relaxed);
+                        t_acc.fetch_add((t_e * 1000.0) as u32, Ordering::Relaxed);
+                        c_acc.fetch_add(count, Ordering::Relaxed);
+                    }
+                },
+                err_fn,
+                None,
+            ).ok()?,
+            _ => return None,
+        };
+
+        let _ = stream.play();
+        Some(stream)
+    })();
+
     let mut smoothed_bass = 0.0f32;
     let mut smoothed_mid = 0.0f32;
     let mut smoothed_treble = 0.0f32;
 
     let mut last_emit = Instant::now();
     let emit_interval = Duration::from_millis(28); // ~35 Hz
-    let mut phase: f32 = 0.0;
 
     while IS_VISUALIZER_RUNNING.load(Ordering::SeqCst) {
-        // Consultar estado de reproducción para reactividad armónica
         let is_playing = if let Ok(state) = crate::media_controller::get_media_state() {
             state.status == crate::media_controller::PlaybackStatus::Playing
         } else {
             false
         };
 
-        if is_playing {
-            phase += 0.14;
-            if phase > std::f32::consts::PI * 2.0 {
-                phase -= std::f32::consts::PI * 2.0;
-            }
+        let count = count_accum.swap(0, Ordering::Relaxed);
+        let (raw_bass, raw_mid, raw_treble) = if is_playing && count > 0 {
+            let b_raw = bass_accum.swap(0, Ordering::Relaxed) as f32 / 1000.0;
+            let m_raw = mid_accum.swap(0, Ordering::Relaxed) as f32 / 1000.0;
+            let t_raw = treble_accum.swap(0, Ordering::Relaxed) as f32 / 1000.0;
 
-            // Pulso dinámico que modula bombo/bajo y frecuencias medias
-            let beat = (phase.sin().powi(2) * 0.75 + (phase * 2.0).cos().abs() * 0.25).clamp(0.0, 1.0);
-            let raw_bass = (beat * 0.88).min(1.0);
-            let raw_mid = (beat * 0.62).min(1.0);
-            let raw_treble = ((phase * 3.0).sin().abs() * 0.45).min(1.0);
-
-            let b_rate = if raw_bass > smoothed_bass { 0.85 } else { 0.16 };
-            let m_rate = if raw_mid > smoothed_mid { 0.70 } else { 0.18 };
-            let t_rate = if raw_treble > smoothed_treble { 0.70 } else { 0.18 };
-
-            smoothed_bass += (raw_bass - smoothed_bass) * b_rate;
-            smoothed_mid += (raw_mid - smoothed_mid) * m_rate;
-            smoothed_treble += (raw_treble - smoothed_treble) * t_rate;
+            let count_f = count as f32;
+            let b = (b_raw / count_f).sqrt() * 7.5; // Ganancia calibrada para graves de altavoces de Mac
+            let m = (m_raw / count_f).sqrt() * 5.0;
+            let t = (t_raw / count_f).sqrt() * 4.0;
+            (b.min(1.0), m.min(1.0), t.min(1.0))
         } else {
-            // Decaimiento natural al pausar o parar
-            smoothed_bass *= 0.80;
-            smoothed_mid *= 0.80;
-            smoothed_treble *= 0.80;
-        }
+            (0.0, 0.0, 0.0)
+        };
+
+        let b_rate = if raw_bass > smoothed_bass { 0.85 } else { 0.16 };
+        let m_rate = if raw_mid > smoothed_mid { 0.70 } else { 0.18 };
+        let t_rate = if raw_treble > smoothed_treble { 0.70 } else { 0.18 };
+
+        smoothed_bass += (raw_bass - smoothed_bass) * b_rate;
+        smoothed_mid += (raw_mid - smoothed_mid) * m_rate;
+        smoothed_treble += (raw_treble - smoothed_treble) * t_rate;
 
         if last_emit.elapsed() >= emit_interval {
             last_emit = Instant::now();
