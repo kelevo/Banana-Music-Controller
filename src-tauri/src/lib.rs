@@ -1,4 +1,6 @@
 pub mod media_controller;
+#[cfg(target_os = "macos")]
+pub mod media_controller_macos;
 pub mod window_manager;
 pub mod audio_visualizer;
 
@@ -18,6 +20,7 @@ pub fn run_gsmtc_seek_cli(seconds: f64) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Desactivar el subsistema de audio de Chromium en WebView2 para aislar completamente audiodg.exe
+    #[cfg(target_os = "windows")]
     unsafe {
         std::env::set_var(
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",

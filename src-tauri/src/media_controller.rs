@@ -173,6 +173,9 @@ pub fn media_play_pause() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     send_media_key(0xB3); // VK_MEDIA_PLAY_PAUSE
 
+    #[cfg(target_os = "macos")]
+    crate::media_controller_macos::send_play_pause_macos();
+
     trigger_decoupled_query_delayed(200);
     Ok(())
 }
@@ -181,6 +184,9 @@ pub fn media_play_pause() -> Result<(), String> {
 pub fn media_next() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     send_media_key(0xB0); // VK_MEDIA_NEXT_TRACK
+
+    #[cfg(target_os = "macos")]
+    crate::media_controller_macos::send_next_macos();
 
     trigger_decoupled_query_delayed(220);
     Ok(())
@@ -191,12 +197,19 @@ pub fn media_previous() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     send_media_key(0xB1); // VK_MEDIA_PREV_TRACK
 
+    #[cfg(target_os = "macos")]
+    crate::media_controller_macos::send_previous_macos();
+
     trigger_decoupled_query_delayed(220);
     Ok(())
 }
 
 #[tauri::command]
 pub fn media_seek(position_seconds: f64) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    crate::media_controller_macos::send_seek_macos(position_seconds);
+
+    #[cfg(target_os = "windows")]
     std::thread::spawn(move || {
         let current_exe = std::env::current_exe();
         if let Ok(exe) = current_exe {
@@ -344,7 +357,12 @@ fn fetch_media_state_decoupled() -> MediaState {
         state
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        crate::media_controller_macos::fetch_media_snapshot_macos()
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     MediaState::default()
 }
 

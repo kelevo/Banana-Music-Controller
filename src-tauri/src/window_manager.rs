@@ -82,6 +82,21 @@ pub fn snap_to_bottom_right(window: Window) -> Result<(), String> {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        let monitor_pos = monitor.position();
+        let monitor_size = monitor.size();
+        let margin_right = (20.0 * scale_factor).round() as i32;
+        let margin_bottom = (40.0 * scale_factor).round() as i32;
+        let x = monitor_pos.x + monitor_size.width as i32 - window_w - margin_right;
+        let y = monitor_pos.y + monitor_size.height as i32 - window_h - margin_bottom;
+
+        window
+            .set_position(tauri::Position::Physical(PhysicalPosition { x, y }))
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
     // Fallback general basado en las dimensiones reportadas por Tauri
     let monitor_pos = monitor.position();
     let monitor_size = monitor.size();
