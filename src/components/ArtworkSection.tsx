@@ -8,6 +8,8 @@ import {
 } from "../utils/colorExtractor";
 import { AudioWaveSpectrum } from "./AudioWaveSpectrum";
 import iconChrome from "../assets/icons/icono_chrome.png";
+import iconSafari from "../assets/icons/icono_safari.png";
+import iconMusic from "../assets/icons/icono_music.png";
 
 interface ArtworkSectionProps {
   thumbnailBase64: string | null;
@@ -139,6 +141,28 @@ export const ArtworkSection: React.FC<ArtworkSectionProps> = ({
             </svg>
           </div>
         );
+      case "Safari":
+        return (
+          <div className="artwork-source-app-icon" title="Safari">
+            <img
+              src={iconSafari}
+              alt="Safari"
+              className="artwork-source-icon"
+              draggable={false}
+            />
+          </div>
+        );
+      case "AppleMusic":
+        return (
+          <div className="artwork-source-app-icon" title="Apple Music">
+            <img
+              src={iconMusic}
+              alt="Apple Music"
+              className="artwork-source-icon"
+              draggable={false}
+            />
+          </div>
+        );
       case "MediaPlayer":
       case "Unknown":
       default:
@@ -165,7 +189,7 @@ export const ArtworkSection: React.FC<ArtworkSectionProps> = ({
         className="artwork-wrapper"
         style={{ willChange: "transform" }}
       >
-        {hasValidThumbnail && thumbnailBase64 ? (
+        {sourceApp !== "Safari" && hasValidThumbnail && thumbnailBase64 ? (
           <img
             src={
               thumbnailBase64.startsWith("data:")

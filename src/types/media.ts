@@ -5,6 +5,8 @@ export type MediaSourceApp =
   | 'Chrome' 
   | 'YouTube' 
   | 'Udemy' 
+  | 'Safari'
+  | 'AppleMusic'
   | 'MediaPlayer' 
   | 'Unknown';
 

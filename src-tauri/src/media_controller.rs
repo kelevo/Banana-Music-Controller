@@ -39,6 +39,8 @@ pub enum MediaSourceApp {
     Chrome,
     YouTube,
     Udemy,
+    Safari,
+    AppleMusic,
     MediaPlayer,
     Unknown,
 }
@@ -642,6 +644,8 @@ fn get_fallback_color(source_app: &MediaSourceApp) -> String {
         MediaSourceApp::Chrome => "#F59E0B".to_string(),
         MediaSourceApp::YouTube => "#EF4444".to_string(),
         MediaSourceApp::Udemy => "#A435F0".to_string(),
+        MediaSourceApp::Safari => "#007AFF".to_string(),
+        MediaSourceApp::AppleMusic => "#FA243C".to_string(),
         MediaSourceApp::MediaPlayer => "#3B82F6".to_string(),
         MediaSourceApp::Unknown => "#1DB954".to_string(),
     }

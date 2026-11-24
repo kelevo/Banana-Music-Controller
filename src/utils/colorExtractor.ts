@@ -57,6 +57,20 @@ export function getFallbackFourPalette(
         waveMiddle: "#8B5CF6",
         waveInner: "#581C87",
       };
+    case "Safari":
+      return {
+        backgroundColor: "#007AFF",
+        waveOuter: "#00C7FF",
+        waveMiddle: "#007AFF",
+        waveInner: "#0040A8",
+      };
+    case "AppleMusic":
+      return {
+        backgroundColor: "#FA243C",
+        waveOuter: "#FF2D55",
+        waveMiddle: "#FA243C",
+        waveInner: "#9E002B",
+      };
     case "MediaPlayer":
       return {
         backgroundColor: "#2563EB",

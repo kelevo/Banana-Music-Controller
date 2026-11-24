@@ -260,47 +260,72 @@ fn fetch_from_safari() -> Option<MediaState> {
     let script = r#"
     try
         tell application "Safari"
+            if (count of windows) is 0 then return "NONE"
+
+            -- 1. Intentar primero con la pestaña activa de la ventana frontal
+            try
+                set curTab to current tab of front window
+                set u to URL of curTab
+                set tt to name of curTab
+                set isPlaying to "playing"
+                set curTime to 0
+                set totalDur to 0
+                try
+                    set isPlaying to (do JavaScript "
+                        var v = document.querySelector('video') || document.querySelector('audio');
+                        (v && !v.paused) ? 'playing' : (v ? 'paused' : 'unknown');
+                    " in curTab)
+                    if isPlaying is "playing" then
+                        set curTime to (do JavaScript "var v = document.querySelector('video') || document.querySelector('audio'); v ? Math.floor(v.currentTime) : 0;" in curTab) as integer
+                        set totalDur to (do JavaScript "var v = document.querySelector('video') || document.querySelector('audio'); v ? Math.floor(v.duration) : 0;" in curTab) as integer
+                        return ("Safari§" & isPlaying & "§" & tt & "§Safari§" & curTime & "§" & totalDur & "§" & u)
+                    end if
+                end try
+            end try
+
+            -- 2. Buscar en todas las pestañas de todas las ventanas si alguna reproduce video/audio
             set pausedCandidate to ""
             repeat with w in windows
                 repeat with t in tabs of w
                     set u to URL of t
                     set tt to name of t
-                    if u contains "youtube.com" or u contains "youtu.be" or u contains "soundcloud.com" or u contains "udemy.com" or u contains "twitch.tv" or u contains "spotify.com" or u contains "vimeo.com" or u contains "music.apple.com" then
-                        set isPlaying to "playing"
-                        set curTime to 0
-                        set totalDur to 0
-                        try
-                            set isPlaying to (do JavaScript "
-                                var v = document.querySelector('video') || document.querySelector('audio');
-                                (v && !v.paused) ? 'playing' : 'paused';
-                            " in t)
-                            set curTime to (do JavaScript "
-                                var v = document.querySelector('video') || document.querySelector('audio');
-                                v ? Math.floor(v.currentTime) : 0;
-                            " in t) as integer
-                            set totalDur to (do JavaScript "
-                                var v = document.querySelector('video') || document.querySelector('audio');
-                                v ? Math.floor(v.duration) : 0;
-                            " in t) as integer
-                        end try
-                        set itemStr to ("Safari§" & isPlaying & "§" & tt & "§Web§" & curTime & "§" & totalDur & "§" & u)
+                    try
+                        set isPlaying to (do JavaScript "
+                            var v = document.querySelector('video') || document.querySelector('audio');
+                            (v && !v.paused) ? 'playing' : (v ? 'paused' : 'none');
+                        " in t)
                         if isPlaying is "playing" then
-                            return itemStr
-                        else if pausedCandidate is "" then
-                            set pausedCandidate to itemStr
+                            set curTime to (do JavaScript "var v = document.querySelector('video') || document.querySelector('audio'); v ? Math.floor(v.currentTime) : 0;" in t) as integer
+                            set totalDur to (do JavaScript "var v = document.querySelector('video') || document.querySelector('audio'); v ? Math.floor(v.duration) : 0;" in t) as integer
+                            return ("Safari§playing§" & tt & "§Safari§" & curTime & "§" & totalDur & "§" & u)
+                        else if isPlaying is "paused" and pausedCandidate is "" then
+                            set curTime to (do JavaScript "var v = document.querySelector('video') || document.querySelector('audio'); v ? Math.floor(v.currentTime) : 0;" in t) as integer
+                            set totalDur to (do JavaScript "var v = document.querySelector('video') || document.querySelector('audio'); v ? Math.floor(v.duration) : 0;" in t) as integer
+                            set pausedCandidate to ("Safari§paused§" & tt & "§Safari§" & curTime & "§" & totalDur & "§" & u)
                         end if
-                    end if
+                    end try
                 end repeat
             end repeat
+
             if pausedCandidate is not "" then
                 return pausedCandidate
             end if
+
+            -- 3. Fallback: Tomar el nombre de la pestaña activa de la ventana frontal
+            try
+                set curTab to current tab of front window
+                set u to URL of curTab
+                set tt to name of curTab
+                if tt is not "" then
+                    return ("Safari§playing§" & tt & "§Safari§0§0§" & u)
+                end if
+            end try
         end tell
     end try
     return "NONE"
     "#;
 
-    let res = parse_browser_media_output(script, MediaSourceApp::MediaPlayer);
+    let res = parse_browser_media_output(script, MediaSourceApp::Safari);
     if res.is_some() {
         if let Ok(mut guard) = LAST_ACTIVE_BROWSER.lock() {
             *guard = "safari".to_string();
@@ -341,7 +366,7 @@ fn fetch_from_apple_music() -> Option<MediaState> {
     return "NONE"
     "#;
 
-    parse_applescript_output(script, MediaSourceApp::MediaPlayer, "#FA243C")
+    parse_applescript_output(script, MediaSourceApp::AppleMusic, "#FA243C")
 }
 
 fn parse_browser_media_output(script: &str, default_app: MediaSourceApp) -> Option<MediaState> {
@@ -380,11 +405,18 @@ fn parse_browser_media_output(script: &str, default_app: MediaSourceApp) -> Opti
     // Procesar título y artista de la pestaña (ej: "Queen - Bohemian Rhapsody - YouTube")
     let (mut title, mut artist) = clean_media_title(&raw_title);
 
-    let mut source_app = default_app;
+    let mut source_app = default_app.clone();
     let mut accent_color = "#EF4444".to_string(); // YouTube red
     let mut thumbnail_url: Option<String> = None;
 
-    if media_url.contains("youtube.com") || media_url.contains("youtu.be") {
+    if default_app == MediaSourceApp::Safari {
+        source_app = MediaSourceApp::Safari;
+        accent_color = "#007AFF".to_string(); // Safari blue
+        artist = "Safari".to_string();
+        if title.is_empty() || title == "Safari" || title == "Página principal" || title == "Untitled" || title == "Desconocido" {
+            title = "Audio de Safari".to_string();
+        }
+    } else if media_url.contains("youtube.com") || media_url.contains("youtu.be") {
         source_app = MediaSourceApp::YouTube;
         accent_color = "#EF4444".to_string();
         if artist == "Desconocido" || artist.is_empty() {
@@ -558,7 +590,14 @@ fn parse_applescript_output(script: &str, app: MediaSourceApp, color: &str) -> O
 
 /// Extrae y limpia el Título y el Artista desde el título de la pestaña del navegador
 fn clean_media_title(raw: &str) -> (String, String) {
-    let mut clean = raw.to_string();
+    let mut clean = raw.trim().to_string();
+
+    // Eliminar contadores de notificación al inicio, ej: "(1) ", "(3518) "
+    if let Some(idx) = clean.find(") ") {
+        if clean.starts_with('(') && clean[1..idx].chars().all(|c| c.is_ascii_digit() || c == '+') {
+            clean = clean[idx + 2..].trim().to_string();
+        }
+    }
 
     // Eliminar sufijos comunes de plataformas web
     for suffix in &[
@@ -567,6 +606,10 @@ fn clean_media_title(raw: &str) -> (String, String) {
         " | SoundCloud",
         " | Spotify",
         " - Twitch",
+        " | Netflix",
+        " | Udemy",
+        " - Vimeo",
+        " - Safari",
     ] {
         if let Some(idx) = clean.rfind(suffix) {
             clean.truncate(idx);
