@@ -31,6 +31,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // Ocultar del Dock en macOS (política accesoria de barra de menú / widget)
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // Reforzar que en Windows no aparezca en la barra de tareas
+            if let Some(win) = app.get_webview_window("main") {
+                window_manager::apply_toolwindow_style(&win.as_ref().window());
+            }
+
             // 1. Configurar menú del System Tray (Bandeja del sistema)
             let toggle_item = MenuItem::with_id(app, "toggle", "Mostrar / Ocultar", true, None::<&str>)?;
             let snap_item = MenuItem::with_id(app, "snap", "Alinear a la esquina", true, None::<&str>)?;
@@ -55,6 +64,7 @@ pub fn run() {
                                 } else {
                                     let _ = win.show();
                                     let _ = win.set_focus();
+                                    window_manager::apply_toolwindow_style(&win.as_ref().window());
                                 }
                             }
                         }
@@ -81,6 +91,7 @@ pub fn run() {
                                 } else {
                                     let _ = win.show();
                                     let _ = win.set_focus();
+                                    window_manager::apply_toolwindow_style(&win.as_ref().window());
                                 }
                             }
                         }

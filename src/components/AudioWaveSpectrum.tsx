@@ -131,7 +131,7 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       // -------------------------------------------------------------------------
       const pointsLayer1: { x: number; y: number }[] = [];
       const baseOffset1 = 4.8;
-      const waveAmp1 = (3.5 * subtleBreath + 18.0 * bass) * currentAmp;
+      const waveAmp1 = (3.5 * subtleBreath + 30.0 * bass) * currentAmp;
 
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
@@ -150,7 +150,7 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       ctx.fillStyle = palette.waveOuter;
       ctx.globalAlpha = Math.min(1.0, 0.92 * currentAmp);
       ctx.shadowColor = palette.waveOuter;
-      ctx.shadowBlur = (10 + 16 * bass) * currentAmp;
+      ctx.shadowBlur = (10 + 24 * bass) * currentAmp;
       drawSmoothSpline(ctx, pointsLayer1);
       ctx.fill();
       ctx.restore();
@@ -160,7 +160,7 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       // -------------------------------------------------------------------------
       const pointsLayer2: { x: number; y: number }[] = [];
       const baseOffset2 = 2.8;
-      const waveAmp2 = (2.2 * subtleBreath + 11.5 * bass) * currentAmp;
+      const waveAmp2 = (2.2 * subtleBreath + 19.5 * bass) * currentAmp;
 
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
@@ -179,7 +179,7 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       ctx.fillStyle = palette.waveMiddle;
       ctx.globalAlpha = Math.min(1.0, 0.96 * currentAmp);
       ctx.shadowColor = palette.waveMiddle;
-      ctx.shadowBlur = (6 + 8 * bass) * currentAmp;
+      ctx.shadowBlur = (6 + 14 * bass) * currentAmp;
       drawSmoothSpline(ctx, pointsLayer2);
       ctx.fill();
       ctx.restore();
@@ -189,7 +189,7 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       // -------------------------------------------------------------------------
       const pointsLayer3: { x: number; y: number }[] = [];
       const baseOffset3 = 1.0;
-      const waveAmp3 = (1.0 * subtleBreath + 6.0 * bass) * currentAmp;
+      const waveAmp3 = (1.0 * subtleBreath + 10.5 * bass) * currentAmp;
 
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);

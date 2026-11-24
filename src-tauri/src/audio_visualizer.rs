@@ -149,7 +149,7 @@ fn run_macos_visualizer_loop(app_handle: AppHandle) {
             let t_raw = treble_accum.swap(0, Ordering::Relaxed) as f32 / 1000.0;
 
             let count_f = count as f32;
-            let b = (b_raw / count_f).sqrt() * 7.5; // Ganancia calibrada para graves de altavoces de Mac
+            let b = (b_raw / count_f).sqrt() * 14.0; // Ganancia ultra-reactiva para graves en Mac
             let m = (m_raw / count_f).sqrt() * 5.0;
             let t = (t_raw / count_f).sqrt() * 4.0;
             (b.min(1.0), m.min(1.0), t.min(1.0))
@@ -168,9 +168,9 @@ fn run_macos_visualizer_loop(app_handle: AppHandle) {
         if last_emit.elapsed() >= emit_interval {
             last_emit = Instant::now();
 
-            let b_val = if smoothed_bass < 0.015 { 0.0 } else { smoothed_bass.min(1.0) };
-            let m_val = if smoothed_mid < 0.015 { 0.0 } else { smoothed_mid.min(1.0) };
-            let t_val = if smoothed_treble < 0.015 { 0.0 } else { smoothed_treble.min(1.0) };
+            let b_val = if smoothed_bass < 0.008 { 0.0 } else { smoothed_bass.min(1.0) };
+            let m_val = if smoothed_mid < 0.015 { 0.0 } else { smoothed_mid };
+            let t_val = if smoothed_treble < 0.015 { 0.0 } else { smoothed_treble };
 
             let bands = AudioBands {
                 bass: (b_val * 100.0).round() / 100.0,
@@ -328,10 +328,10 @@ fn run_wasapi_loopback_loop(app_handle: AppHandle) {
                         packet_size = capture_client.GetNextPacketSize().unwrap_or(0);
                     }
 
-                    // Calcular valores RMS con énfasis en la pegada del bajo
+                    // Calcular valores RMS con énfasis en la pegada del bajo (ganancia ultra-reactiva)
                     let (raw_bass, raw_mid, raw_treble) = if samples_count > 0 {
                         let count_f = samples_count as f32;
-                        let b = (bass_energy / count_f).sqrt() * 5.4;
+                        let b = (bass_energy / count_f).sqrt() * 9.5;
                         let m = (mid_energy / count_f).sqrt() * 4.0;
                         let t = (treble_energy / count_f).sqrt() * 5.0;
                         (b.min(1.0), m.min(1.0), t.min(1.0))
@@ -352,11 +352,11 @@ fn run_wasapi_loopback_loop(app_handle: AppHandle) {
                     if last_emit.elapsed() >= emit_interval {
                         last_emit = Instant::now();
 
-                        // Curva de pegada no lineal para que el bombo se sienta físico
-                        let b_val = if smoothed_bass < 0.015 {
+                        // Curva de pegada no lineal para que el bombo se sienta físico y enérgico
+                        let b_val = if smoothed_bass < 0.008 {
                             0.0
                         } else {
-                            (smoothed_bass.powf(1.15) * 1.12).min(1.0)
+                            (smoothed_bass.powf(1.05) * 1.35).min(1.0)
                         };
                         let m_val = if smoothed_mid < 0.015 { 0.0 } else { smoothed_mid };
                         let t_val = if smoothed_treble < 0.015 { 0.0 } else { smoothed_treble };
