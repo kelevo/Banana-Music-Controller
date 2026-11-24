@@ -12,43 +12,70 @@ struct CachedTrackArt {
 
 static ART_CACHE: Mutex<Option<CachedTrackArt>> = Mutex::new(None);
 static LAST_DETECTED_APP: Mutex<MediaSourceApp> = Mutex::new(MediaSourceApp::Unknown);
+static LAST_BROWSER_IS_SAFARI: Mutex<bool> = Mutex::new(false);
 
-/// Consulta el estado multimedia en macOS con prioridad:
-/// 1. Spotify nativo
-/// 2. Google Chrome (YouTube, Spotify Web, SoundCloud, etc.)
-/// 3. Apple Music
-/// 4. Safari
+/// Consulta el estado multimedia en macOS con prioridad inteligente:
+/// Cualquier reproductor que esté activamente en reproducción (Playing)
+/// tiene prioridad absoluta sobre reproductores en pausa (Paused).
 pub fn fetch_media_snapshot_macos() -> MediaState {
-    // 1. Intentar Spotify
-    if let Some(state) = fetch_from_spotify() {
-        if let Ok(mut guard) = LAST_DETECTED_APP.lock() {
-            *guard = MediaSourceApp::Spotify;
-        }
-        return state;
-    }
+    let mut candidates: Vec<MediaState> = Vec::new();
 
-    // 2. Intentar Google Chrome
-    if let Some(state) = fetch_from_chrome() {
-        if let Ok(mut guard) = LAST_DETECTED_APP.lock() {
-            *guard = state.source_app.clone();
-        }
-        return state;
-    }
-
-    // 3. Intentar Apple Music
+    // 1. Apple Music
     if let Some(state) = fetch_from_apple_music() {
-        if let Ok(mut guard) = LAST_DETECTED_APP.lock() {
-            *guard = MediaSourceApp::MediaPlayer;
+        if state.status == PlaybackStatus::Playing {
+            if let Ok(mut guard) = LAST_DETECTED_APP.lock() {
+                *guard = MediaSourceApp::MediaPlayer;
+            }
+            return state;
         }
-        return state;
+        candidates.push(state);
     }
 
-    // 4. Intentar Safari
-    if let Some(state) = fetch_from_safari() {
-        if let Ok(mut guard) = LAST_DETECTED_APP.lock() {
-            *guard = state.source_app.clone();
+    // 2. Spotify nativo
+    if let Some(state) = fetch_from_spotify() {
+        if state.status == PlaybackStatus::Playing {
+            if let Ok(mut guard) = LAST_DETECTED_APP.lock() {
+                *guard = MediaSourceApp::Spotify;
+            }
+            return state;
         }
-        return state;
+        candidates.push(state);
+    }
+
+    // 3. Safari (YouTube, Udemy, SoundCloud, Twitch, etc.)
+    if let Some(state) = fetch_from_safari() {
+        if state.status == PlaybackStatus::Playing {
+            if let Ok(mut guard) = LAST_DETECTED_APP.lock() {
+                *guard = state.source_app.clone();
+            }
+            if let Ok(mut is_safari) = LAST_BROWSER_IS_SAFARI.lock() {
+                *is_safari = true;
+            }
+            return state;
+        }
+        candidates.push(state);
+    }
+
+    // 4. Google Chrome
+    if let Some(state) = fetch_from_chrome() {
+        if state.status == PlaybackStatus::Playing {
+            if let Ok(mut guard) = LAST_DETECTED_APP.lock() {
+                *guard = state.source_app.clone();
+            }
+            if let Ok(mut is_safari) = LAST_BROWSER_IS_SAFARI.lock() {
+                *is_safari = false;
+            }
+            return state;
+        }
+        candidates.push(state);
+    }
+
+    // Si nadie está reproduciendo, retornar la primera fuente pausada que tengamos
+    if let Some(paused_state) = candidates.into_iter().next() {
+        if let Ok(mut guard) = LAST_DETECTED_APP.lock() {
+            *guard = paused_state.source_app.clone();
+        }
+        return paused_state;
     }
 
     MediaState::default()
@@ -58,20 +85,22 @@ pub fn fetch_media_snapshot_macos() -> MediaState {
 fn fetch_from_spotify() -> Option<MediaState> {
     let script = r#"
     try
-        tell application "Spotify"
-            set pState to player state as string
-            if pState is "playing" or pState is "paused" then
-                set trackName to name of current track
-                set trackArtist to artist of current track
-                set trackPos to player position as integer
-                set trackDur to ((duration of current track) / 1000) as integer
-                set artUrl to ""
-                try
-                    set artUrl to artwork url of current track
-                end try
-                return "Spotify§" & pState & "§" & trackName & "§" & trackArtist & "§" & trackPos & "§" & trackDur & "§" & artUrl
-            end if
-        end tell
+        if application "Spotify" is running then
+            tell application "Spotify"
+                set pState to player state as string
+                if pState is "playing" or pState is "paused" then
+                    set trackName to name of current track
+                    set trackArtist to artist of current track
+                    set trackPos to player position as integer
+                    set trackDur to ((duration of current track) / 1000) as integer
+                    set artUrl to ""
+                    try
+                        set artUrl to artwork url of current track
+                    end try
+                    return "Spotify§" & pState & "§" & trackName & "§" & trackArtist & "§" & trackPos & "§" & trackDur & "§" & artUrl
+                end if
+            end tell
+        end if
     end try
     return "NONE"
     "#;
@@ -83,37 +112,46 @@ fn fetch_from_spotify() -> Option<MediaState> {
 fn fetch_from_chrome() -> Option<MediaState> {
     let script = r#"
     try
-        tell application "Google Chrome"
-            repeat with w in windows
-                repeat with t in tabs of w
-                    set u to URL of t
-                    set tt to title of t
-                    if u contains "youtube.com/watch" or u contains "music.youtube.com" or u contains "soundcloud.com" or u contains "open.spotify.com" or u contains "twitch.tv" or u contains "udemy.com" then
-                        -- Comprobar si el video/audio en la pestaña está reproduciendo
-                        set isPlaying to "playing"
-                        try
-                            set isPlaying to (tell t to execute javascript "
-                                var v = document.querySelector('video') || document.querySelector('audio');
-                                (v && !v.paused) ? 'playing' : 'paused';
-                            ")
-                        end try
-                        set curTime to 0
-                        set totalDur to 0
-                        try
-                            set curTime to (tell t to execute javascript "
-                                var v = document.querySelector('video') || document.querySelector('audio');
-                                v ? Math.floor(v.currentTime) : 0;
-                            ") as integer
-                            set totalDur to (tell t to execute javascript "
-                                var v = document.querySelector('video') || document.querySelector('audio');
-                                v ? Math.floor(v.duration) : 0;
-                            ") as integer
-                        end try
-                        return "Chrome§" & isPlaying & "§" & tt & "§YouTube§" & curTime & "§" & totalDur & "§" & u
-                    end if
+        if application "Google Chrome" is running then
+            tell application "Google Chrome"
+                set pausedCandidate to ""
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        set u to URL of t
+                        set tt to title of t
+                        if u contains "youtube.com" or u contains "youtu.be" or u contains "music.youtube.com" or u contains "soundcloud.com" or u contains "open.spotify.com" or u contains "twitch.tv" or u contains "udemy.com" or u contains "vimeo.com" then
+                            -- Comprobar si el video/audio en la pestaña está reproduciendo
+                            set isPlaying to "playing"
+                            set curTime to 0
+                            set totalDur to 0
+                            try
+                                set isPlaying to (tell t to execute javascript "
+                                    var v = document.querySelector('video') || document.querySelector('audio');
+                                    (v && !v.paused) ? 'playing' : 'paused';
+                                ")
+                                set curTime to (tell t to execute javascript "
+                                    var v = document.querySelector('video') || document.querySelector('audio');
+                                    v ? Math.floor(v.currentTime) : 0;
+                                ") as integer
+                                set totalDur to (tell t to execute javascript "
+                                    var v = document.querySelector('video') || document.querySelector('audio');
+                                    v ? Math.floor(v.duration) : 0;
+                                ") as integer
+                            end try
+                            set itemStr to ("Chrome§" & isPlaying & "§" & tt & "§Web§" & curTime & "§" & totalDur & "§" & u)
+                            if isPlaying is "playing" then
+                                return itemStr
+                            else if pausedCandidate is "" then
+                                set pausedCandidate to itemStr
+                            end if
+                        end if
+                    end repeat
                 end repeat
-            end repeat
-        end tell
+                if pausedCandidate is not "" then
+                    return pausedCandidate
+                end if
+            end tell
+        end if
     end try
     return "NONE"
     "#;
@@ -121,42 +159,86 @@ fn fetch_from_chrome() -> Option<MediaState> {
     parse_browser_media_output(script, MediaSourceApp::Chrome)
 }
 
-/// Consulta para Safari
+/// Consulta para Safari buscando pestañas con contenido multimedia (YouTube, Udemy, SoundCloud, Twitch, etc.)
 fn fetch_from_safari() -> Option<MediaState> {
     let script = r#"
     try
-        tell application "Safari"
-            repeat with w in windows
-                repeat with t in tabs of w
-                    set u to URL of t
-                    set tt to name of t
-                    if u contains "youtube.com/watch" or u contains "music.youtube.com" or u contains "soundcloud.com" then
-                        return "Safari§playing§" & tt & "§YouTube§0§0§" & u
-                    end if
+        if application "Safari" is running then
+            tell application "Safari"
+                set pausedCandidate to ""
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        set u to URL of t
+                        set tt to name of t
+                        if u contains "youtube.com" or u contains "youtu.be" or u contains "soundcloud.com" or u contains "udemy.com" or u contains "twitch.tv" or u contains "spotify.com" or u contains "vimeo.com" or u contains "music.apple.com" then
+                            set isPlaying to "playing"
+                            set curTime to 0
+                            set totalDur to 0
+                            try
+                                set isPlaying to (do JavaScript "
+                                    var v = document.querySelector('video') || document.querySelector('audio');
+                                    (v && !v.paused) ? 'playing' : 'paused';
+                                " in t)
+                                set curTime to (do JavaScript "
+                                    var v = document.querySelector('video') || document.querySelector('audio');
+                                    v ? Math.floor(v.currentTime) : 0;
+                                " in t) as integer
+                                set totalDur to (do JavaScript "
+                                    var v = document.querySelector('video') || document.querySelector('audio');
+                                    v ? Math.floor(v.duration) : 0;
+                                " in t) as integer
+                            end try
+                            set itemStr to ("Safari§" & isPlaying & "§" & tt & "§Web§" & curTime & "§" & totalDur & "§" & u)
+                            if isPlaying is "playing" then
+                                return itemStr
+                            else if pausedCandidate is "" then
+                                set pausedCandidate to itemStr
+                            end if
+                        end if
+                    end repeat
                 end repeat
-            end repeat
-        end tell
+                if pausedCandidate is not "" then
+                    return pausedCandidate
+                end if
+            end tell
+        end if
     end try
     return "NONE"
     "#;
 
-    parse_browser_media_output(script, MediaSourceApp::YouTube)
+    parse_browser_media_output(script, MediaSourceApp::MediaPlayer)
 }
 
-/// Consulta para Apple Music
+/// Consulta para Apple Music defensiva (resistente a radios, streams y pistas sin metadatos completos)
 fn fetch_from_apple_music() -> Option<MediaState> {
     let script = r#"
     try
-        tell application "Music"
-            set pState to player state as string
-            if pState is "playing" or pState is "paused" then
-                set trackName to name of current track
-                set trackArtist to artist of current track
-                set trackPos to player position as integer
-                set trackDur to duration of current track as integer
-                return "Music§" & pState & "§" & trackName & "§" & trackArtist & "§" & trackPos & "§" & trackDur & "§"
-            end if
-        end tell
+        if application "Music" is running then
+            tell application "Music"
+                set pState to (player state as string)
+                if pState is "playing" or pState is "paused" then
+                    set trackName to ""
+                    set trackArtist to ""
+                    set trackPos to 0
+                    set trackDur to 0
+                    try
+                        set trackName to name of current track
+                    end try
+                    try
+                        set trackArtist to artist of current track
+                    end try
+                    try
+                        set trackPos to player position as integer
+                    end try
+                    try
+                        set trackDur to duration of current track as integer
+                    end try
+                    if trackName is not "" then
+                        return "Music§" & pState & "§" & trackName & "§" & trackArtist & "§" & trackPos & "§" & trackDur & "§"
+                    end if
+                end if
+            end tell
+        end if
     end try
     return "NONE"
     "#;
@@ -442,6 +524,10 @@ pub fn send_play_pause_macos() {
         let guard = LAST_DETECTED_APP.lock().unwrap();
         guard.clone()
     };
+    let is_safari = {
+        let guard = LAST_BROWSER_IS_SAFARI.lock().unwrap();
+        *guard
+    };
 
     match app {
         MediaSourceApp::Spotify => {
@@ -453,15 +539,23 @@ pub fn send_play_pause_macos() {
             let _ = Command::new("osascript").arg("-e").arg(script).output();
         }
         MediaSourceApp::YouTube | MediaSourceApp::Chrome | MediaSourceApp::Udemy => {
-            send_chrome_play_pause();
+            if is_safari {
+                send_safari_play_pause();
+            } else {
+                send_chrome_play_pause();
+            }
         }
         MediaSourceApp::MediaPlayer => {
-            let script = r#"
-            try
-                tell application "Music" to playpause
-            end try
-            "#;
-            let _ = Command::new("osascript").arg("-e").arg(script).output();
+            if is_safari {
+                send_safari_play_pause();
+            } else {
+                let script = r#"
+                try
+                    tell application "Music" to playpause
+                end try
+                "#;
+                let _ = Command::new("osascript").arg("-e").arg(script).output();
+            }
         }
         MediaSourceApp::Unknown => {
             let _ = Command::new("osascript").arg("-e").arg(r#"
@@ -469,7 +563,13 @@ pub fn send_play_pause_macos() {
                 tell application "Spotify" to playpause
             end try
             "#).output();
+            let _ = Command::new("osascript").arg("-e").arg(r#"
+            try
+                tell application "Music" to playpause
+            end try
+            "#).output();
             send_chrome_play_pause();
+            send_safari_play_pause();
         }
     }
 }
@@ -480,6 +580,10 @@ pub fn send_next_macos() {
         let guard = LAST_DETECTED_APP.lock().unwrap();
         guard.clone()
     };
+    let is_safari = {
+        let guard = LAST_BROWSER_IS_SAFARI.lock().unwrap();
+        *guard
+    };
 
     match app {
         MediaSourceApp::Spotify => {
@@ -491,15 +595,23 @@ pub fn send_next_macos() {
             let _ = Command::new("osascript").arg("-e").arg(script).output();
         }
         MediaSourceApp::YouTube | MediaSourceApp::Chrome | MediaSourceApp::Udemy => {
-            send_chrome_next();
+            if is_safari {
+                send_safari_next();
+            } else {
+                send_chrome_next();
+            }
         }
         MediaSourceApp::MediaPlayer => {
-            let script = r#"
-            try
-                tell application "Music" to next track
-            end try
-            "#;
-            let _ = Command::new("osascript").arg("-e").arg(script).output();
+            if is_safari {
+                send_safari_next();
+            } else {
+                let script = r#"
+                try
+                    tell application "Music" to next track
+                end try
+                "#;
+                let _ = Command::new("osascript").arg("-e").arg(script).output();
+            }
         }
         MediaSourceApp::Unknown => {
             let _ = Command::new("osascript").arg("-e").arg(r#"
@@ -507,7 +619,13 @@ pub fn send_next_macos() {
                 tell application "Spotify" to next track
             end try
             "#).output();
+            let _ = Command::new("osascript").arg("-e").arg(r#"
+            try
+                tell application "Music" to next track
+            end try
+            "#).output();
             send_chrome_next();
+            send_safari_next();
         }
     }
 }
@@ -517,6 +635,10 @@ pub fn send_previous_macos() {
     let app = {
         let guard = LAST_DETECTED_APP.lock().unwrap();
         guard.clone()
+    };
+    let is_safari = {
+        let guard = LAST_BROWSER_IS_SAFARI.lock().unwrap();
+        *guard
     };
 
     match app {
@@ -529,15 +651,23 @@ pub fn send_previous_macos() {
             let _ = Command::new("osascript").arg("-e").arg(script).output();
         }
         MediaSourceApp::YouTube | MediaSourceApp::Chrome | MediaSourceApp::Udemy => {
-            send_chrome_prev();
+            if is_safari {
+                send_safari_prev();
+            } else {
+                send_chrome_prev();
+            }
         }
         MediaSourceApp::MediaPlayer => {
-            let script = r#"
-            try
-                tell application "Music" to previous track
-            end try
-            "#;
-            let _ = Command::new("osascript").arg("-e").arg(script).output();
+            if is_safari {
+                send_safari_prev();
+            } else {
+                let script = r#"
+                try
+                    tell application "Music" to previous track
+                end try
+                "#;
+                let _ = Command::new("osascript").arg("-e").arg(script).output();
+            }
         }
         MediaSourceApp::Unknown => {
             let _ = Command::new("osascript").arg("-e").arg(r#"
@@ -545,7 +675,13 @@ pub fn send_previous_macos() {
                 tell application "Spotify" to previous track
             end try
             "#).output();
+            let _ = Command::new("osascript").arg("-e").arg(r#"
+            try
+                tell application "Music" to previous track
+            end try
+            "#).output();
             send_chrome_prev();
+            send_safari_prev();
         }
     }
 }
@@ -556,6 +692,10 @@ pub fn send_seek_macos(seconds: f64) {
     let app = {
         let guard = LAST_DETECTED_APP.lock().unwrap();
         guard.clone()
+    };
+    let is_safari = {
+        let guard = LAST_BROWSER_IS_SAFARI.lock().unwrap();
+        *guard
     };
 
     match app {
@@ -571,42 +711,178 @@ pub fn send_seek_macos(seconds: f64) {
             let _ = Command::new("osascript").arg("-e").arg(&script).output();
         }
         MediaSourceApp::YouTube | MediaSourceApp::Chrome | MediaSourceApp::Udemy => {
-            let script = format!(
-                r#"
-                try
-                    tell application "Google Chrome"
-                        repeat with w in windows
-                            repeat with t in tabs of w
-                                set u to URL of t
-                                if u contains "youtube.com" or u contains "music.youtube" or u contains "soundcloud.com" then
-                                    tell t to execute javascript "
-                                        var v = document.querySelector('video') || document.querySelector('audio');
-                                        if (v) v.currentTime = {};
-                                    "
-                                    return
-                                end if
+            if is_safari {
+                let script = format!(
+                    r#"
+                    try
+                        tell application "Safari"
+                            repeat with w in windows
+                                repeat with t in tabs of w
+                                    set u to URL of t
+                                    if u contains "youtube.com" or u contains "youtu.be" or u contains "soundcloud.com" or u contains "udemy.com" then
+                                        try
+                                            do JavaScript "
+                                                var v = document.querySelector('video') || document.querySelector('audio');
+                                                if (v) v.currentTime = {};
+                                            " in t
+                                        end try
+                                        return
+                                    end if
+                                end repeat
                             end repeat
-                        end repeat
-                    end tell
-                end try
-                "#,
-                sec_int
-            );
-            let _ = Command::new("osascript").arg("-e").arg(&script).output();
+                        end tell
+                    end try
+                    "#,
+                    sec_int
+                );
+                let _ = Command::new("osascript").arg("-e").arg(&script).output();
+            } else {
+                let script = format!(
+                    r#"
+                    try
+                        tell application "Google Chrome"
+                            repeat with w in windows
+                                repeat with t in tabs of w
+                                    set u to URL of t
+                                    if u contains "youtube.com" or u contains "music.youtube" or u contains "soundcloud.com" then
+                                        tell t to execute javascript "
+                                            var v = document.querySelector('video') || document.querySelector('audio');
+                                            if (v) v.currentTime = {};
+                                        "
+                                        return
+                                    end if
+                                end repeat
+                            end repeat
+                        end tell
+                    end try
+                    "#,
+                    sec_int
+                );
+                let _ = Command::new("osascript").arg("-e").arg(&script).output();
+            }
         }
         MediaSourceApp::MediaPlayer => {
-            let script = format!(
-                r#"
-                try
-                    tell application "Music" to set player position to {}
-                end try
-                "#,
-                sec_int
-            );
-            let _ = Command::new("osascript").arg("-e").arg(&script).output();
+            if is_safari {
+                let script = format!(
+                    r#"
+                    try
+                        tell application "Safari"
+                            repeat with w in windows
+                                repeat with t in tabs of w
+                                    set u to URL of t
+                                    if u contains "youtube.com" or u contains "youtu.be" or u contains "soundcloud.com" or u contains "udemy.com" then
+                                        try
+                                            do JavaScript "
+                                                var v = document.querySelector('video') || document.querySelector('audio');
+                                                if (v) v.currentTime = {};
+                                            " in t
+                                        end try
+                                        return
+                                    end if
+                                end repeat
+                            end repeat
+                        end tell
+                    end try
+                    "#,
+                    sec_int
+                );
+                let _ = Command::new("osascript").arg("-e").arg(&script).output();
+            } else {
+                let script = format!(
+                    r#"
+                    try
+                        tell application "Music" to set player position to {}
+                    end try
+                    "#,
+                    sec_int
+                );
+                let _ = Command::new("osascript").arg("-e").arg(&script).output();
+            }
         }
         _ => {}
     }
+}
+
+fn send_safari_play_pause() {
+    let script = r#"
+    try
+        tell application "Safari"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    set u to URL of t
+                    if u contains "youtube.com" or u contains "youtu.be" or u contains "soundcloud.com" or u contains "spotify.com" or u contains "udemy.com" or u contains "twitch.tv" or u contains "vimeo.com" then
+                        try
+                            do JavaScript "
+                                var btn = document.querySelector('.ytp-play-button');
+                                if (btn) {
+                                    btn.click();
+                                } else {
+                                    var v = document.querySelector('video') || document.querySelector('audio');
+                                    if (v) { v.paused ? v.play() : v.pause(); }
+                                }
+                            " in t
+                        end try
+                        return
+                    end if
+                end repeat
+            end repeat
+        end tell
+    end try
+    "#;
+    let _ = Command::new("osascript").arg("-e").arg(script).output();
+}
+
+fn send_safari_next() {
+    let script = r#"
+    try
+        tell application "Safari"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    set u to URL of t
+                    if u contains "youtube.com" or u contains "youtu.be" then
+                        try
+                            do JavaScript "
+                                var nextBtn = document.querySelector('.ytp-next-button');
+                                if (nextBtn) nextBtn.click();
+                            " in t
+                        end try
+                        return
+                    end if
+                end repeat
+            end repeat
+        end tell
+    end try
+    "#;
+    let _ = Command::new("osascript").arg("-e").arg(script).output();
+}
+
+fn send_safari_prev() {
+    let script = r#"
+    try
+        tell application "Safari"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    set u to URL of t
+                    if u contains "youtube.com" or u contains "youtu.be" then
+                        try
+                            do JavaScript "
+                                var prevBtn = document.querySelector('.ytp-prev-button');
+                                if (prevBtn) {
+                                    prevBtn.click();
+                                } else {
+                                    var v = document.querySelector('video');
+                                    if (v) v.currentTime = 0;
+                                }
+                            " in t
+                        end try
+                        return
+                    end if
+                end repeat
+            end repeat
+        end tell
+    end try
+    "#;
+    let _ = Command::new("osascript").arg("-e").arg(script).output();
 }
 
 fn send_chrome_play_pause() {
