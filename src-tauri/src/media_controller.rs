@@ -39,6 +39,8 @@ pub enum MediaSourceApp {
     Chrome,
     YouTube,
     Udemy,
+    Safari,
+    AppleMusic,
     MediaPlayer,
     Unknown,
 }
@@ -387,6 +389,106 @@ pub fn start_media_sync_loop(app_handle: AppHandle) {
 }
 
 #[cfg(target_os = "windows")]
+fn select_best_windows_session(
+    session_manager: &GlobalSystemMediaTransportControlsSessionManager,
+) -> Option<GlobalSystemMediaTransportControlsSession> {
+    if let Ok(sessions) = session_manager.GetSessions() {
+        let count = sessions.Size().unwrap_or(0);
+        if count > 0 {
+            let mut playing_spotify = None;
+            let mut playing_music = None;
+            let mut playing_browser = None;
+            let mut playing_other = None;
+
+            let mut paused_spotify = None;
+            let mut paused_music = None;
+            let mut paused_browser = None;
+            let mut paused_other = None;
+
+            for i in 0..count {
+                if let Ok(s) = sessions.GetAt(i) {
+                    let app_id = s
+                        .SourceAppUserModelId()
+                        .map(|id| id.to_string().to_lowercase())
+                        .unwrap_or_default();
+
+                    let is_playing = s
+                        .GetPlaybackInfo()
+                        .and_then(|info| info.PlaybackStatus())
+                        .map(|st| {
+                            st == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing
+                        })
+                        .unwrap_or(false);
+
+                    let is_spotify = app_id.contains("spotify");
+                    let is_music = app_id.contains("applemusic") || app_id.contains("itunes");
+                    let is_browser = app_id.contains("chrome")
+                        || app_id.contains("msedge")
+                        || app_id.contains("edge")
+                        || app_id.contains("firefox")
+                        || app_id.contains("brave");
+
+                    if is_playing {
+                        if is_spotify && playing_spotify.is_none() {
+                            playing_spotify = Some(s);
+                        } else if is_music && playing_music.is_none() {
+                            playing_music = Some(s);
+                        } else if is_browser && playing_browser.is_none() {
+                            playing_browser = Some(s);
+                        } else if playing_other.is_none() {
+                            playing_other = Some(s);
+                        }
+                    } else {
+                        if is_spotify && paused_spotify.is_none() {
+                            paused_spotify = Some(s);
+                        } else if is_music && paused_music.is_none() {
+                            paused_music = Some(s);
+                        } else if is_browser && paused_browser.is_none() {
+                            paused_browser = Some(s);
+                        } else if paused_other.is_none() {
+                            paused_other = Some(s);
+                        }
+                    }
+                }
+            }
+
+            // 1. Spotify reproduciendo (Prioridad máxima)
+            if let Some(s) = playing_spotify {
+                return Some(s);
+            }
+            // 2. Apple Music reproduciendo
+            if let Some(s) = playing_music {
+                return Some(s);
+            }
+            // 3. Navegadores web reproduciendo
+            if let Some(s) = playing_browser {
+                return Some(s);
+            }
+            // 4. Otros reproductores activos
+            if let Some(s) = playing_other {
+                return Some(s);
+            }
+
+            // Si ninguno está reproduciendo, mantener prioridad entre sesiones pausadas:
+            if let Some(s) = paused_spotify {
+                return Some(s);
+            }
+            if let Some(s) = paused_music {
+                return Some(s);
+            }
+            if let Some(s) = paused_browser {
+                return Some(s);
+            }
+            if let Some(s) = paused_other {
+                return Some(s);
+            }
+        }
+    }
+
+    session_manager.GetCurrentSession().ok()
+}
+
+#[cfg(target_os = "windows")]
 fn read_session_snapshot() -> MediaState {
     let session_manager = match GlobalSystemMediaTransportControlsSessionManager::RequestAsync()
         .and_then(|op| op.join())
@@ -395,9 +497,9 @@ fn read_session_snapshot() -> MediaState {
         Err(_) => return MediaState::default(),
     };
 
-    let session = match session_manager.GetCurrentSession() {
-        Ok(s) => s,
-        Err(_) => return MediaState::default(),
+    let session = match select_best_windows_session(&session_manager) {
+        Some(s) => s,
+        None => return MediaState::default(),
     };
 
     let mut state = MediaState::default();
@@ -407,7 +509,14 @@ fn read_session_snapshot() -> MediaState {
         let app_str = app_id.to_string().to_lowercase();
         state.source_app = if app_str.contains("spotify") {
             MediaSourceApp::Spotify
-        } else if app_str.contains("chrome") {
+        } else if app_str.contains("applemusic") || app_str.contains("itunes") {
+            MediaSourceApp::AppleMusic
+        } else if app_str.contains("chrome")
+            || app_str.contains("msedge")
+            || app_str.contains("edge")
+            || app_str.contains("firefox")
+            || app_str.contains("brave")
+        {
             MediaSourceApp::Chrome
         } else if app_str.contains("youtube") {
             MediaSourceApp::YouTube
@@ -642,6 +751,8 @@ fn get_fallback_color(source_app: &MediaSourceApp) -> String {
         MediaSourceApp::Chrome => "#F59E0B".to_string(),
         MediaSourceApp::YouTube => "#EF4444".to_string(),
         MediaSourceApp::Udemy => "#A435F0".to_string(),
+        MediaSourceApp::Safari => "#007AFF".to_string(),
+        MediaSourceApp::AppleMusic => "#FA243C".to_string(),
         MediaSourceApp::MediaPlayer => "#3B82F6".to_string(),
         MediaSourceApp::Unknown => "#1DB954".to_string(),
     }

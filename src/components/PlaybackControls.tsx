@@ -8,6 +8,7 @@ import iconSiguiente from "../assets/icons/icono_siguiente.svg";
 
 interface PlaybackControlsProps {
   status: PlaybackStatus;
+  disabled?: boolean;
   onPrevious: () => void;
   onTogglePlayPause: () => void;
   onNext: () => void;
@@ -15,6 +16,7 @@ interface PlaybackControlsProps {
 
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   status,
+  disabled = false,
   onPrevious,
   onTogglePlayPause,
   onNext,
@@ -23,11 +25,12 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     <div className="playback-controls-group">
       <button
         type="button"
+        disabled={disabled}
         className="control-action-btn btn-prev interactive"
         title="Canción anterior"
         onClick={(e) => {
           e.stopPropagation();
-          onPrevious();
+          if (!disabled) onPrevious();
         }}
       >
         <img
@@ -41,11 +44,12 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
       <button
         type="button"
+        disabled={disabled}
         className="control-action-btn btn-play-pause interactive"
         title={status === "Playing" ? "Pausar" : "Reproducir"}
         onClick={(e) => {
           e.stopPropagation();
-          onTogglePlayPause();
+          if (!disabled) onTogglePlayPause();
         }}
       >
         <img
@@ -59,11 +63,12 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
       <button
         type="button"
+        disabled={disabled}
         className="control-action-btn btn-next interactive"
         title="Siguiente canción"
         onClick={(e) => {
           e.stopPropagation();
-          onNext();
+          if (!disabled) onNext();
         }}
       >
         <img
