@@ -134,6 +134,7 @@ fn run_macos_visualizer_loop(app_handle: AppHandle) {
 
     let mut last_emit = Instant::now();
     let emit_interval = Duration::from_millis(28); // ~35 Hz
+    let mut fallback_phase: f32 = 0.0;
 
     while IS_VISUALIZER_RUNNING.load(Ordering::SeqCst) {
         let is_playing = if let Ok(state) = crate::media_controller::get_media_state() {
@@ -152,7 +153,27 @@ fn run_macos_visualizer_loop(app_handle: AppHandle) {
             let b = (b_raw / count_f).sqrt() * 14.0; // Ganancia ultra-reactiva para graves en Mac
             let m = (m_raw / count_f).sqrt() * 5.0;
             let t = (t_raw / count_f).sqrt() * 4.0;
-            (b.min(1.0), m.min(1.0), t.min(1.0))
+
+            // Si el micrófono capta audio real ambiental (altavoces de Mac)
+            if b > 0.02 || m > 0.02 {
+                (b.min(1.0), m.min(1.0), t.min(1.0))
+            } else {
+                // Si hay música pero el micro está silenciado o el usuario usa auriculares/AirPods
+                fallback_phase += 0.14;
+                if fallback_phase > std::f32::consts::PI * 2.0 {
+                    fallback_phase -= std::f32::consts::PI * 2.0;
+                }
+                let beat = (fallback_phase.sin().powi(2) * 0.75 + (fallback_phase * 2.0).cos().abs() * 0.25).clamp(0.0, 1.0);
+                ((beat * 0.88).min(1.0), (beat * 0.60).min(1.0), 0.35)
+            }
+        } else if is_playing {
+            // Si no hay stream de audio activo (permiso de micrófono denegado/pendiente o error en dispositivo)
+            fallback_phase += 0.14;
+            if fallback_phase > std::f32::consts::PI * 2.0 {
+                fallback_phase -= std::f32::consts::PI * 2.0;
+            }
+            let beat = (fallback_phase.sin().powi(2) * 0.75 + (fallback_phase * 2.0).cos().abs() * 0.25).clamp(0.0, 1.0);
+            ((beat * 0.88).min(1.0), (beat * 0.60).min(1.0), 0.35)
         } else {
             (0.0, 0.0, 0.0)
         };
@@ -201,6 +222,7 @@ fn run_wasapi_loopback_loop(app_handle: AppHandle) {
 
     let mut last_emit = Instant::now();
     let emit_interval = Duration::from_millis(28); // ~35 Hz para un flujo IPC suave y ligero
+    let mut fallback_phase: f32 = 0.0;
 
     loop {
         let capture_result = (|| -> windows::core::Result<()> {
@@ -328,6 +350,12 @@ fn run_wasapi_loopback_loop(app_handle: AppHandle) {
                         packet_size = capture_client.GetNextPacketSize().unwrap_or(0);
                     }
 
+                    let is_playing = if let Ok(state) = crate::media_controller::get_media_state() {
+                        state.status == crate::media_controller::PlaybackStatus::Playing
+                    } else {
+                        false
+                    };
+
                     // Calcular valores RMS con énfasis en la pegada del bajo (ganancia ultra-reactiva)
                     let (raw_bass, raw_mid, raw_treble) = if samples_count > 0 {
                         let count_f = samples_count as f32;
@@ -335,6 +363,13 @@ fn run_wasapi_loopback_loop(app_handle: AppHandle) {
                         let m = (mid_energy / count_f).sqrt() * 4.0;
                         let t = (treble_energy / count_f).sqrt() * 5.0;
                         (b.min(1.0), m.min(1.0), t.min(1.0))
+                    } else if is_playing {
+                        fallback_phase += 0.14;
+                        if fallback_phase > std::f32::consts::PI * 2.0 {
+                            fallback_phase -= std::f32::consts::PI * 2.0;
+                        }
+                        let beat = (fallback_phase.sin().powi(2) * 0.75 + (fallback_phase * 2.0).cos().abs() * 0.25).clamp(0.0, 1.0);
+                        ((beat * 0.88).min(1.0), (beat * 0.60).min(1.0), 0.35)
                     } else {
                         (0.0, 0.0, 0.0)
                     };
