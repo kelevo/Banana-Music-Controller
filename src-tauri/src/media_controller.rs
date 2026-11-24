@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter};
 use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
 use windows::Media::Control::{
+    GlobalSystemMediaTransportControlsSession,
     GlobalSystemMediaTransportControlsSessionManager,
     GlobalSystemMediaTransportControlsSessionMediaProperties,
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,

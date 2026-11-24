@@ -101,13 +101,21 @@ pub fn snap_to_bottom_right(window: Window) -> Result<(), String> {
                     let x = mi.rc_work.right - window_w - margin;
                     let y = mi.rc_work.bottom - window_h - margin;
 
-                    window
+                    return window
                         .set_position(tauri::Position::Physical(PhysicalPosition { x, y }))
-                        .map_err(|e| e.to_string())?;
-                    return Ok(());
+                        .map_err(|e| e.to_string());
                 }
             }
         }
+
+        let monitor_pos = monitor.position();
+        let monitor_size = monitor.size();
+        let x = monitor_pos.x + monitor_size.width as i32 - window_w - margin;
+        let y = monitor_pos.y + monitor_size.height as i32 - window_h - margin;
+
+        window
+            .set_position(tauri::Position::Physical(PhysicalPosition { x, y }))
+            .map_err(|e| e.to_string())
     }
 
     #[cfg(target_os = "macos")]
