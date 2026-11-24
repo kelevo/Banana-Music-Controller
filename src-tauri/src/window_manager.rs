@@ -23,6 +23,34 @@ struct MonitorInfo {
 unsafe extern "system" {
     fn MonitorFromWindow(hwnd: isize, dw_flags: u32) -> isize;
     fn GetMonitorInfoW(h_monitor: isize, lpmi: *mut MonitorInfo) -> i32;
+    fn GetWindowLongW(hwnd: isize, n_index: i32) -> i32;
+    fn SetWindowLongW(hwnd: isize, n_index: i32, new_long: i32) -> i32;
+}
+
+#[cfg(target_os = "windows")]
+const GWL_EXSTYLE: i32 = -20;
+#[cfg(target_os = "windows")]
+const WS_EX_TOOLWINDOW: i32 = 0x00000080;
+#[cfg(target_os = "windows")]
+const WS_EX_APPWINDOW: i32 = 0x00040000;
+
+/// Asegura que la ventana no aparezca en la barra de tareas de Windows bajo ninguna circunstancia
+pub fn apply_toolwindow_style(window: &Window) {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(hwnd) = window.hwnd() {
+            let hwnd_val = hwnd.0 as isize;
+            unsafe {
+                let ex_style = GetWindowLongW(hwnd_val, GWL_EXSTYLE);
+                let new_style = (ex_style | WS_EX_TOOLWINDOW) & !WS_EX_APPWINDOW;
+                SetWindowLongW(hwnd_val, GWL_EXSTYLE, new_style);
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = window;
+    }
 }
 
 /// Menú contextual nativo de Windows (Clic derecho sobre el widget)
@@ -94,20 +122,21 @@ pub fn snap_to_bottom_right(window: Window) -> Result<(), String> {
         window
             .set_position(tauri::Position::Physical(PhysicalPosition { x, y }))
             .map_err(|e| e.to_string())?;
-        return Ok(());
+        Ok(())
     }
 
-    // Fallback general basado en las dimensiones reportadas por Tauri
-    let monitor_pos = monitor.position();
-    let monitor_size = monitor.size();
-    let x = monitor_pos.x + monitor_size.width as i32 - window_w - margin;
-    let y = monitor_pos.y + monitor_size.height as i32 - window_h - margin;
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        let monitor_pos = monitor.position();
+        let monitor_size = monitor.size();
+        let x = monitor_pos.x + monitor_size.width as i32 - window_w - margin;
+        let y = monitor_pos.y + monitor_size.height as i32 - window_h - margin;
 
-    window
-        .set_position(tauri::Position::Physical(PhysicalPosition { x, y }))
-        .map_err(|e| e.to_string())?;
-
-    Ok(())
+        window
+            .set_position(tauri::Position::Physical(PhysicalPosition { x, y }))
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 /// Cierre limpio y ordenado de la aplicación

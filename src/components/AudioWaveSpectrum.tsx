@@ -9,22 +9,8 @@ interface AudioWaveSpectrumProps {
 }
 
 const CANVAS_SIZE = 120;
-const BASE_RADIUS = 25.5; // Coincide con el contorno de la carátula 52x52
-const SQUIRCLE_EXPONENT = 3.4; // Exponente superelíptico que emula esquinas redondeadas de 11px
-const POINTS_COUNT = 64;
-
-/**
- * Calcula el radio base de una superelipse/squircle para un ángulo dado.
- */
-function getSquircleRadius(angle: number, baseRadius: number): number {
-  const cos = Math.abs(Math.cos(angle));
-  const sin = Math.abs(Math.sin(angle));
-  const denominator = Math.pow(
-    Math.pow(cos, SQUIRCLE_EXPONENT) + Math.pow(sin, SQUIRCLE_EXPONENT),
-    1 / SQUIRCLE_EXPONENT
-  );
-  return denominator > 0.001 ? baseRadius / denominator : baseRadius;
-}
+const BASE_RADIUS = 26; // Radio del contorno de la carátula circular (52px / 2)
+const POINTS_COUNT = 80; // 80 puntos para un trazado suave de las alas y el pellizco central
 
 /**
  * Traza una curva cerrada continua suave que pasa por los puntos generados.
@@ -113,33 +99,60 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       smoothedBassRef.current += (targetBass - smoothedBassRef.current) * 0.28;
       const bass = smoothedBassRef.current;
 
-      // Incremento de tiempo para rotación armónica suave
-      timeRef.current += 0.032 + bass * 0.018;
+      // Ritmo de tiempo suave para respiración sutil en silencio (sin rotación)
+      timeRef.current += 0.035;
       const t = timeRef.current;
-
-      // Ritmo de respiración sutil en momentos de silencio o bajo nivel
-      const subtleBreath = bass > 0.03 ? 0.0 : 0.22 * Math.sin(t * 3.2);
+      const subtleBreath = bass > 0.03 ? 0.0 : 0.15 * Math.sin(t * 2.2);
 
       // =========================================================================
-      // DIBUJO ESTRATIFICADO: Capa 1 (Exterior) -> Capa 2 (Medio) -> Capa 3 (Interior)
-      // Cada capa se dibuja encima de la anterior con radio decreciente,
-      // creando 3 anillos de color sólido nítidamente diferenciados como en la referencia.
+      // ESPECTRO DE ONDAS INSPIRADO EN AFTER EFFECTS (SIMETRÍA BILATERAL LÍQUIDA):
+      // - 2 Alas laterales simétricas que se abren y bombean con el bajo.
+      // - En la parte superior, convergen suavemente y se desvanecen en el centro.
+      // - En la parte inferior, forman una base redondeada limpia.
+      // - 3 Capas concéntricas estrechas y ceñidas en escalón uniforme.
       // =========================================================================
+
+      // Función generadora de la silueta de alas laterales estilo After Effects
+      // con simetría bilateral matemática exacta (espejo perfecto izquierda/derecha)
+      const calculateWingRadius = (
+        angle: number,
+        baseOffset: number,
+        layerScale: number
+      ): number => {
+        // phi va de 0 (centro superior) a PI (centro inferior) simétricamente en ambos lados
+        // Dado que -sin(angle) es idéntico para puntos simétricos respecto al eje Y vertical,
+        // garantizamos un espejo perfecto izquierda/derecha.
+        const phi = Math.acos(Math.max(-1, Math.min(1, -Math.sin(angle))));
+
+        // 1. Ala superior prominente con pico centrado en ~48° (0.84 rad)
+        const wingCenter = 0.84;
+        const wingWidth = 0.40;
+        let wing = Math.exp(-Math.pow((phi - wingCenter) / wingWidth, 2));
+
+        // 2. Pérdida y pellizco en el centro superior (tiende a 0 cuando phi -> 0)
+        wing *= Math.tanh(phi / 0.28);
+
+        // 3. Amortiguación lateral e inferior (muy poco visible, tal como en el video de referencia)
+        const bottomSubtle =
+          phi > Math.PI / 2 ? 0.08 * Math.pow(Math.sin(phi - Math.PI / 2), 2) : 0.0;
+
+        const shapeProfile = wing + bottomSubtle;
+
+        // Amplitud ultra-reactiva que expande las alas al ritmo del bajo
+        const maxAmp = (2.0 * subtleBreath + 18.0 * bass) * layerScale * currentAmp;
+        const delta = shapeProfile * maxAmp;
+
+        return BASE_RADIUS + baseOffset + delta;
+      };
 
       // -------------------------------------------------------------------------
-      // CAPA 1: EXTERIOR (Color 2: waveOuter) - La más grande, pulsa con el bajo
+      // CAPA 1: EXTERIOR (Color 2: waveOuter) - Capa envolvente más externa
       // -------------------------------------------------------------------------
       const pointsLayer1: { x: number; y: number }[] = [];
-      const baseOffset1 = 4.8;
-      const waveAmp1 = (3.5 * subtleBreath + 18.0 * bass) * currentAmp;
-
+      const baseOffset1 = 3.0;
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
-        const baseR = getSquircleRadius(angle, BASE_RADIUS + baseOffset1);
-        const h1 = Math.sin(3 * angle + t * 1.0);
-        const h2 = Math.cos(2 * angle - t * 0.7);
-        const delta = (h1 * 0.65 + h2 * 0.35) * waveAmp1;
-        const r = Math.max(BASE_RADIUS, baseR + delta);
+        const r = calculateWingRadius(angle, baseOffset1, 1.0);
         pointsLayer1.push({
           x: center + Math.cos(angle) * r,
           y: center + Math.sin(angle) * r,
@@ -150,25 +163,19 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       ctx.fillStyle = palette.waveOuter;
       ctx.globalAlpha = Math.min(1.0, 0.92 * currentAmp);
       ctx.shadowColor = palette.waveOuter;
-      ctx.shadowBlur = (10 + 16 * bass) * currentAmp;
+      ctx.shadowBlur = (6 + 12 * bass) * currentAmp;
       drawSmoothSpline(ctx, pointsLayer1);
       ctx.fill();
       ctx.restore();
 
       // -------------------------------------------------------------------------
-      // CAPA 2: INTERMEDIA (Color 3: waveMiddle) - Tamaño medio, sobre Capa 1
+      // CAPA 2: INTERMEDIA (Color 3: waveMiddle) - Ceñida a la Capa 1 (~1.2px)
       // -------------------------------------------------------------------------
       const pointsLayer2: { x: number; y: number }[] = [];
-      const baseOffset2 = 2.8;
-      const waveAmp2 = (2.2 * subtleBreath + 11.5 * bass) * currentAmp;
-
+      const baseOffset2 = 2.0;
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
-        const baseR = getSquircleRadius(angle, BASE_RADIUS + baseOffset2);
-        const h1 = Math.sin(3 * angle + t * 1.0 + 0.85);
-        const h2 = Math.cos(2 * angle - t * 0.7 + 0.4);
-        const delta = (h1 * 0.65 + h2 * 0.35) * waveAmp2;
-        const r = Math.max(BASE_RADIUS, baseR + delta);
+        const r = calculateWingRadius(angle, baseOffset2, 0.76);
         pointsLayer2.push({
           x: center + Math.cos(angle) * r,
           y: center + Math.sin(angle) * r,
@@ -179,25 +186,19 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       ctx.fillStyle = palette.waveMiddle;
       ctx.globalAlpha = Math.min(1.0, 0.96 * currentAmp);
       ctx.shadowColor = palette.waveMiddle;
-      ctx.shadowBlur = (6 + 8 * bass) * currentAmp;
+      ctx.shadowBlur = (4 + 8 * bass) * currentAmp;
       drawSmoothSpline(ctx, pointsLayer2);
       ctx.fill();
       ctx.restore();
 
       // -------------------------------------------------------------------------
-      // CAPA 3: INTERIOR (Color 4: waveInner) - La más pequeña, sobre Capa 2
+      // CAPA 3: INTERIOR (Color 4: waveInner) - Ceñida a la Capa 2 (~1.0px)
       // -------------------------------------------------------------------------
       const pointsLayer3: { x: number; y: number }[] = [];
-      const baseOffset3 = 1.0;
-      const waveAmp3 = (1.0 * subtleBreath + 6.0 * bass) * currentAmp;
-
+      const baseOffset3 = 0.9;
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
-        const baseR = getSquircleRadius(angle, BASE_RADIUS + baseOffset3);
-        const h1 = Math.sin(3 * angle + t * 1.0 + 1.7);
-        const h2 = Math.cos(2 * angle - t * 0.7 + 0.8);
-        const delta = (h1 * 0.65 + h2 * 0.35) * waveAmp3;
-        const r = Math.max(BASE_RADIUS, baseR + delta);
+        const r = calculateWingRadius(angle, baseOffset3, 0.52);
         pointsLayer3.push({
           x: center + Math.cos(angle) * r,
           y: center + Math.sin(angle) * r,
