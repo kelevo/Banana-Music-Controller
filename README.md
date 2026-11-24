@@ -15,10 +15,14 @@ Widget multimedia flotante, minimalista y siempre visible (*Always-on-Top*) comp
 ## ✨ Características Principales
 
 - 🎵 **Sincronización Global Multimedia:**
-  - **macOS:** Detección de reproductores nativos (Spotify, Apple Music) y pestañas multimedia de Google Chrome / Safari con descarga automática de miniaturas en HD para YouTube y SoundCloud.
-  - **Windows 11:** Integración profunda con GSMTC (*Global System Media Transport Controls*) vía WinRT.
+  - **macOS:** Detección de reproductores nativos (**Spotify**, **Apple Music**) y pestañas multimedia de **Safari**, **Google Chrome** y **Microsoft Edge** con limpieza automática de títulos y descarga de miniaturas en HD (YouTube/SoundCloud).
+  - **Windows 11:** Integración profunda con GSMTC (*Global System Media Transport Controls*) vía WinRT con consulta multi-sesión activa.
+  - **Jerarquía inteligente de reproducción (macOS & Windows):**
+    - Si varias apps reproducen audio al mismo tiempo, prioriza automáticamente: **Spotify > Apple Music > Navegadores web (Safari, Chrome, Edge) > Otros reproductores**.
+    - **Prevención de auto-apertura:** No abre reproductores cerrados por cuenta propia.
+    - **Bloqueo preventivo de controles:** Desactiva visualmente los botones de acción si no hay ninguna aplicación multimedia activa.
 - 🎨 **Paleta Dinámica Adaptativa:** Extracción en tiempo real de 4 colores armónicos de la carátula para generar el degradado de fondo y las ondas.
-- 🟡 **Carátula Circular con Efecto Punch:** Medallón circular centrado que pulsa elásticamente en GPU al compás de las frecuencias bajas (*bass*).
+- 🟡 **Carátula Circular Edge-to-Edge con Efecto Punch:** Medallón circular centrado de 52px que pulsa elásticamente en GPU al compás de los bajos (*bass*). Los logos oficiales (Safari, Apple Music HD, Spotify, Chrome) y carátulas de álbum llenan el 100% de la circunferencia sin bordes sobrantes ni marcos cuadrados.
 - 🌊 **Visualizador de Espectro Bilateral Reactivo:** Espectro de ondas de 3 capas concéntricas ceñidas con simetría en espejo exacta inspirado en After Effects:
   - Alas laterales superiores que reaccionan con potencia al ritmo de los bajos y convergen con un pellizco suave en el centro superior.
   - Amortiguación armónica lateral e inferior para mantener una silueta limpia y orgánica.
@@ -119,8 +123,8 @@ Banana-Music-Controller/
 │   ├── icons/                      # Variantes nativas de iconos (.icns, .ico, .png, tray)
 │   ├── src/
 │   │   ├── audio_visualizer.rs     # Captura de audio loopback (CoreAudio en macOS / WASAPI en Windows)
-│   │   ├── media_controller.rs     # Coordinador multimedia desacoplado
-│   │   ├── media_controller_macos.rs # Integración con Spotify, Chrome y Apple Music en macOS
+│   │   ├── media_controller.rs     # Coordinador multimedia desacoplado (GSMTC y jerarquía de sesiones)
+│   │   ├── media_controller_macos.rs # Integración con Spotify, Apple Music, Safari y Chrome en macOS
 │   │   ├── window_manager.rs       # Snap a la esquina adaptativo y menús nativos
 │   │   └── lib.rs                  # Setup de Tauri, System Tray y manejadores IPC
 │   ├── Info.plist                  # Configuración macOS (LSUIElement para modo sin Dock)
