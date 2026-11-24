@@ -94,6 +94,10 @@ export const AudioWidget: React.FC<AudioWidgetProps> = ({
     "--accent-glow": hexToRgba(activeColor, 0.45),
   } as React.CSSProperties;
 
+  const hasActiveMedia = Boolean(
+    media.title || media.status === "Playing" || media.status === "Paused"
+  );
+
   return (
     <div
       className="audio-widget-card"
@@ -125,6 +129,7 @@ export const AudioWidget: React.FC<AudioWidgetProps> = ({
           <TrackInfoMarquee title={media.title} artist={media.artist} />
           <PlaybackControls
             status={media.status}
+            disabled={!hasActiveMedia}
             onPrevious={onPrevious}
             onTogglePlayPause={onTogglePlayPause}
             onNext={onNext}
