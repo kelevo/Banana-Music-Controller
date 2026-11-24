@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
-import { MediaSourceApp } from "../types/media";
+import React, { useState, useEffect, useRef } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { AudioBands, MediaSourceApp } from "../types/media";
 import {
   extractFourColors,
   FourColorPalette,
@@ -31,6 +32,50 @@ export const ArtworkSection: React.FC<ArtworkSectionProps> = ({
   const [palette, setPalette] = useState<FourColorPalette>(() =>
     getFallbackFourPalette(sourceApp, accentColor)
   );
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Efecto punch elástico sutil en la carátula reactivo a los golpes de bajo
+  useEffect(() => {
+    if (!isPlaying) {
+      if (wrapperRef.current) {
+        wrapperRef.current.style.transform = "scale(1)";
+      }
+      return;
+    }
+
+    let currentScale = 1.0;
+    let targetScale = 1.0;
+    let animId: number;
+
+    const unlistenPromise = listen<AudioBands>("audio-bands-update", (event) => {
+      if (event.payload && isPlaying) {
+        // Incremento punch sutil (~3.8% máx) que acompaña el bombo
+        const bassLevel = Math.min(event.payload.bass, 1.0);
+        targetScale = 1.0 + bassLevel * 0.038;
+      }
+    });
+
+    const updatePunch = () => {
+      // Interpolación elástica: ataque rápido (0.28) y retorno elástico a 1.0 (0.16)
+      currentScale += (targetScale - currentScale) * 0.28;
+      targetScale += (1.0 - targetScale) * 0.16;
+
+      if (wrapperRef.current) {
+        wrapperRef.current.style.transform = `scale(${currentScale.toFixed(4)})`;
+      }
+      animId = requestAnimationFrame(updatePunch);
+    };
+
+    animId = requestAnimationFrame(updatePunch);
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+      cancelAnimationFrame(animId);
+      if (wrapperRef.current) {
+        wrapperRef.current.style.transform = "scale(1)";
+      }
+    };
+  }, [isPlaying]);
 
   useEffect(() => {
     setImgError(false);
@@ -114,8 +159,12 @@ export const ArtworkSection: React.FC<ArtworkSectionProps> = ({
       {/* Espectro Wave de Audio estratificado (3 capas, reactivas al bajo) situado por detrás de la carátula */}
       <AudioWaveSpectrum isPlaying={isPlaying} palette={palette} />
 
-      {/* Carátula fija de 52x52 con esquinas redondeadas en primer plano */}
-      <div className="artwork-wrapper">
+      {/* Carátula de 52x52 con efecto sutil de punch reactivo al bajo */}
+      <div
+        ref={wrapperRef}
+        className="artwork-wrapper"
+        style={{ willChange: "transform" }}
+      >
         {hasValidThumbnail && thumbnailBase64 ? (
           <img
             src={

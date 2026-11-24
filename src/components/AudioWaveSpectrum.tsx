@@ -128,7 +128,7 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       // =========================================================================
 
       // -------------------------------------------------------------------------
-      // CAPA 1: EXTERIOR (Color 2: waveOuter) - La más grande, pulsa con el bajo
+      // CAPA 1: EXTERIOR (Color 2: waveOuter) - Lóbulos abajo, arriba-der y arriba-izq
       // -------------------------------------------------------------------------
       const pointsLayer1: { x: number; y: number }[] = [];
       const baseOffset1 = 4.8;
@@ -136,10 +136,10 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
 
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
+        const aRot = angle + Math.PI; // Inversión 180°: picos abajo, arriba-der y arriba-izq
         const baseR = getSquircleRadius(angle, BASE_RADIUS + baseOffset1);
-        // Sin rotación en el ángulo: la onda se mantiene fija en su orientación
-        const h1 = Math.sin(3 * angle);
-        const h2 = Math.cos(2 * angle);
+        const h1 = Math.sin(3 * aRot);
+        const h2 = Math.cos(2 * aRot);
         const delta = (h1 * 0.65 + h2 * 0.35) * waveAmp1;
         const r = Math.max(BASE_RADIUS, baseR + delta);
         pointsLayer1.push({
@@ -166,9 +166,10 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
 
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
+        const aRot = angle + Math.PI;
         const baseR = getSquircleRadius(angle, BASE_RADIUS + baseOffset2);
-        const h1 = Math.sin(3 * angle + 0.85);
-        const h2 = Math.cos(2 * angle + 0.4);
+        const h1 = Math.sin(3 * aRot + 0.85);
+        const h2 = Math.cos(2 * aRot + 0.4);
         const delta = (h1 * 0.65 + h2 * 0.35) * waveAmp2;
         const r = Math.max(BASE_RADIUS, baseR + delta);
         pointsLayer2.push({
@@ -195,9 +196,10 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
 
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
+        const aRot = angle + Math.PI;
         const baseR = getSquircleRadius(angle, BASE_RADIUS + baseOffset3);
-        const h1 = Math.sin(3 * angle + 1.7);
-        const h2 = Math.cos(2 * angle + 0.8);
+        const h1 = Math.sin(3 * aRot + 1.7);
+        const h2 = Math.cos(2 * aRot + 0.8);
         const delta = (h1 * 0.65 + h2 * 0.35) * waveAmp3;
         const r = Math.max(BASE_RADIUS, baseR + delta);
         pointsLayer3.push({
