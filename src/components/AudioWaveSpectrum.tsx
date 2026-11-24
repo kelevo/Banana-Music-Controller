@@ -113,17 +113,18 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       smoothedBassRef.current += (targetBass - smoothedBassRef.current) * 0.28;
       const bass = smoothedBassRef.current;
 
-      // Incremento de tiempo para rotación armónica suave
-      timeRef.current += 0.032 + bass * 0.018;
+      // Ritmo de tiempo lento solo para respiración sutil en silencio (sin rotación)
+      timeRef.current += 0.035;
       const t = timeRef.current;
 
-      // Ritmo de respiración sutil en momentos de silencio o bajo nivel
-      const subtleBreath = bass > 0.03 ? 0.0 : 0.22 * Math.sin(t * 3.2);
+      // Respiración sutil en momentos de silencio absoluto
+      const subtleBreath = bass > 0.03 ? 0.0 : 0.18 * Math.sin(t * 2.2);
 
       // =========================================================================
-      // DIBUJO ESTRATIFICADO: Capa 1 (Exterior) -> Capa 2 (Medio) -> Capa 3 (Interior)
-      // Cada capa se dibuja encima de la anterior con radio decreciente,
-      // creando 3 anillos de color sólido nítidamente diferenciados como en la referencia.
+      // DIBUJO ESTRATIFICADO (ORIENTACIÓN FIJA - SIN ROTACIÓN):
+      // Capa 1 (Exterior) -> Capa 2 (Medio) -> Capa 3 (Interior)
+      // Cada capa mantiene sus lóbulos en posición fija y pulsa al ritmo del bajo.
+      // Intensidad calibrada a 2/3 del valor previo (reducción de un tercio).
       // =========================================================================
 
       // -------------------------------------------------------------------------
@@ -131,13 +132,14 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       // -------------------------------------------------------------------------
       const pointsLayer1: { x: number; y: number }[] = [];
       const baseOffset1 = 4.8;
-      const waveAmp1 = (3.5 * subtleBreath + 30.0 * bass) * currentAmp;
+      const waveAmp1 = (3.0 * subtleBreath + 20.0 * bass) * currentAmp;
 
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
         const baseR = getSquircleRadius(angle, BASE_RADIUS + baseOffset1);
-        const h1 = Math.sin(3 * angle + t * 1.0);
-        const h2 = Math.cos(2 * angle - t * 0.7);
+        // Sin rotación en el ángulo: la onda se mantiene fija en su orientación
+        const h1 = Math.sin(3 * angle);
+        const h2 = Math.cos(2 * angle);
         const delta = (h1 * 0.65 + h2 * 0.35) * waveAmp1;
         const r = Math.max(BASE_RADIUS, baseR + delta);
         pointsLayer1.push({
@@ -150,7 +152,7 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       ctx.fillStyle = palette.waveOuter;
       ctx.globalAlpha = Math.min(1.0, 0.92 * currentAmp);
       ctx.shadowColor = palette.waveOuter;
-      ctx.shadowBlur = (10 + 24 * bass) * currentAmp;
+      ctx.shadowBlur = (8 + 16 * bass) * currentAmp;
       drawSmoothSpline(ctx, pointsLayer1);
       ctx.fill();
       ctx.restore();
@@ -160,13 +162,13 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       // -------------------------------------------------------------------------
       const pointsLayer2: { x: number; y: number }[] = [];
       const baseOffset2 = 2.8;
-      const waveAmp2 = (2.2 * subtleBreath + 19.5 * bass) * currentAmp;
+      const waveAmp2 = (2.0 * subtleBreath + 13.0 * bass) * currentAmp;
 
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
         const baseR = getSquircleRadius(angle, BASE_RADIUS + baseOffset2);
-        const h1 = Math.sin(3 * angle + t * 1.0 + 0.85);
-        const h2 = Math.cos(2 * angle - t * 0.7 + 0.4);
+        const h1 = Math.sin(3 * angle + 0.85);
+        const h2 = Math.cos(2 * angle + 0.4);
         const delta = (h1 * 0.65 + h2 * 0.35) * waveAmp2;
         const r = Math.max(BASE_RADIUS, baseR + delta);
         pointsLayer2.push({
@@ -179,7 +181,7 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       ctx.fillStyle = palette.waveMiddle;
       ctx.globalAlpha = Math.min(1.0, 0.96 * currentAmp);
       ctx.shadowColor = palette.waveMiddle;
-      ctx.shadowBlur = (6 + 14 * bass) * currentAmp;
+      ctx.shadowBlur = (5 + 10 * bass) * currentAmp;
       drawSmoothSpline(ctx, pointsLayer2);
       ctx.fill();
       ctx.restore();
@@ -189,13 +191,13 @@ export const AudioWaveSpectrum: React.FC<AudioWaveSpectrumProps> = ({
       // -------------------------------------------------------------------------
       const pointsLayer3: { x: number; y: number }[] = [];
       const baseOffset3 = 1.0;
-      const waveAmp3 = (1.0 * subtleBreath + 10.5 * bass) * currentAmp;
+      const waveAmp3 = (1.0 * subtleBreath + 7.0 * bass) * currentAmp;
 
       for (let i = 0; i < POINTS_COUNT; i++) {
         const angle = (i / POINTS_COUNT) * (Math.PI * 2);
         const baseR = getSquircleRadius(angle, BASE_RADIUS + baseOffset3);
-        const h1 = Math.sin(3 * angle + t * 1.0 + 1.7);
-        const h2 = Math.cos(2 * angle - t * 0.7 + 0.8);
+        const h1 = Math.sin(3 * angle + 1.7);
+        const h2 = Math.cos(2 * angle + 0.8);
         const delta = (h1 * 0.65 + h2 * 0.35) * waveAmp3;
         const r = Math.max(BASE_RADIUS, baseR + delta);
         pointsLayer3.push({
