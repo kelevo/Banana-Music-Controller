@@ -8,33 +8,38 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Widget multimedia flotante, minimalista y siempre visible (*Always-on-Top*) compatible de forma nativa con **macOS** (12.0+) y **Windows 11**. Sincroniza y controla la reproducción multimedia global de tu sistema (Spotify, Apple Music, Google Chrome, YouTube, Udemy, VLC, etc.) con una estética adaptativa inspirada en píldora que extrae los colores dominantes de la carátula en reproducción y un espectro concéntrico de ondas de audio reactivo en tiempo real.
+Widget multimedia flotante, minimalista y siempre visible (*Always-on-Top*) compatible de forma nativa con **macOS** (12.0+) y **Windows 11**. Sincroniza y controla la reproducción multimedia global de tu sistema (Spotify, Apple Music, Google Chrome, YouTube, SoundCloud, VLC, etc.) con una estética adaptativa inspirada en píldora, carátula circular con punch elástico al ritmo del bombo y un espectro bilateral de ondas de audio reactivo en tiempo real estilo After Effects.
 
 ---
 
 ## ✨ Características Principales
 
 - 🎵 **Sincronización Global Multimedia:**
-  - **macOS:** Detección de reproductores nativos (Spotify, Apple Music) y pestañas multimedia de Google Chrome / Safari con descarga automática de miniaturas en HD para YouTube.
+  - **macOS:** Detección de reproductores nativos (Spotify, Apple Music) y pestañas multimedia de Google Chrome / Safari con descarga automática de miniaturas en HD para YouTube y SoundCloud.
   - **Windows 11:** Integración profunda con GSMTC (*Global System Media Transport Controls*) vía WinRT.
 - 🎨 **Paleta Dinámica Adaptativa:** Extracción en tiempo real de 4 colores armónicos de la carátula para generar el degradado de fondo y las ondas.
-- 🌊 **Visualizador de Espectro Reactivo al Audio:** Espectro concéntrico de ondas de 3 capas situado detrás de la carátula:
-  - En **macOS**: Captura de audio en tiempo real mediante CoreAudio analizando las frecuencias bajas (*bass*).
-  - En **Windows**: WASAPI Loopback nativo a nivel de sistema.
+- 🟡 **Carátula Circular con Efecto Punch:** Medallón circular centrado que pulsa elásticamente en GPU al compás de las frecuencias bajas (*bass*).
+- 🌊 **Visualizador de Espectro Bilateral Reactivo:** Espectro de ondas de 3 capas concéntricas ceñidas con simetría en espejo exacta inspirado en After Effects:
+  - Alas laterales superiores que reaccionan con potencia al ritmo de los bajos y convergen con un pellizco suave en el centro superior.
+  - Amortiguación armónica lateral e inferior para mantener una silueta limpia y orgánica.
+  - En **macOS**: Captura y filtrado IIR de frecuencias bajas (20-150 Hz) en tiempo real mediante **CoreAudio**.
+  - En **Windows**: Captura por hardware mediante **WASAPI Loopback**.
 - 📌 **Ventana Flotante Inteligente:**
   - Sin bordes nativos ni marco (`decorations: false`, `transparent: true`).
   - Arrastre libre con clic izquierdo hacia cualquier posición de tu pantalla.
   - **Snap rápido:** Doble clic sobre el widget para enviarlo a la esquina inferior derecha del monitor activo, respetando el Dock y la barra de menú en macOS, o la barra de tareas en Windows.
   - Menú contextual nativo con clic derecho para cerrar o alinear.
-- 🔔 **Integración con System Tray (Bandeja del Sistema / Menú Bar):** Icono circular oficial en la barra de menús de macOS o en el área de notificación de Windows con menú para mostrar, ocultar y cerrar la aplicación.
+- 🔕 **Modo Tray-Only (Sin Saturar tu Espacio de Trabajo):**
+  - **macOS:** Configurado como accesorio del sistema (`LSUIElement` / `ActivationPolicy::Accessory`), por lo que **no aparece en el Dock**, habitando únicamente en la barra de menús superior.
+  - **Windows 11:** Estilo `WS_EX_TOOLWINDOW` para que **no aparezca en la barra de tareas**, gestionándose exclusivamente desde la bandeja del sistema (*System Tray*).
 - ⚡ **Rendimiento Ultraligero:** Construido con Tauri v2 y Rust. Consume menos de 35 MB de RAM y menos de 0.1% de CPU.
-- 🛡️ **Cero Interrupciones de Audio:** Arquitectura desacoplada en hilos dedicados con recuperación progresiva de carátulas para evitar cortes o micro-stuttering en el sonido.
+- 🛡️ **Cero Interrupciones de Audio:** Arquitectura desacoplada en hilos dedicados para evitar cortes o micro-stuttering en el sonido.
 
 ---
 
 ## 🚀 Instalación y Descarga
 
-Puedes descargar el instalador oficial o el ejecutable directo desde la sección de **[Releases](https://github.com/tu-usuario/banana-music-controller/releases)**:
+Puedes descargar el instalador oficial o el ejecutable directo desde la sección de **[Releases](https://github.com/kelevo/Banana-Music-Controller/releases)**:
 
 ### macOS (Apple Silicon & Intel)
 1. **Instalador Oficial DMG (`banana-music-controller_0.1.0_aarch64.dmg`):**  
@@ -59,7 +64,7 @@ Puedes descargar el instalador oficial o el ejecutable directo desde la sección
 | **Menú contextual** | Clic derecho sobre el widget (Cerrar / Alinear) |
 | **Controles de música** | Play / Pause, Canción anterior, Canción siguiente |
 | **Buscar posición (Seek)** | Clic o arrastre en la barra de progreso |
-| **System Tray** | Clic izquierdo alterna visibilidad / Clic derecho abre menú de control |
+| **System Tray / Menú Bar** | Clic izquierdo alterna visibilidad / Clic derecho abre menú de control |
 
 ---
 
@@ -76,8 +81,8 @@ Puedes descargar el instalador oficial o el ejecutable directo desde la sección
 
 1. **Clonar el repositorio:**
    ```bash
-   git clone https://github.com/tu-usuario/banana-music-controller.git
-   cd banana-music-controller
+   git clone https://github.com/kelevo/Banana-Music-Controller.git
+   cd Banana-Music-Controller
    ```
 
 2. **Instalar dependencias de Node:**
@@ -102,11 +107,11 @@ Puedes descargar el instalador oficial o el ejecutable directo desde la sección
 ## 🏗️ Arquitectura del Proyecto
 
 ```text
-banana-music-controller/
+Banana-Music-Controller/
 ├── public/                         # Favicon e iconos web públicos
 ├── src/                            # Frontend en React 19 + TypeScript
 │   ├── assets/                     # Iconos SVG y logos oficiales de la marca
-│   ├── components/                 # AudioWidget, AudioWaveSpectrum, ProgressBar, Marquee...
+│   ├── components/                 # AudioWidget, AudioWaveSpectrum, ArtworkSection...
 │   ├── hooks/                      # useAudioProgress, useMarquee...
 │   ├── styles/                     # Estilos visuales del widget y animaciones CSS
 │   └── utils/                      # Extractor cromático de paletas de carátulas
@@ -118,6 +123,7 @@ banana-music-controller/
 │   │   ├── media_controller_macos.rs # Integración con Spotify, Chrome y Apple Music en macOS
 │   │   ├── window_manager.rs       # Snap a la esquina adaptativo y menús nativos
 │   │   └── lib.rs                  # Setup de Tauri, System Tray y manejadores IPC
+│   ├── Info.plist                  # Configuración macOS (LSUIElement para modo sin Dock)
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── package.json
@@ -126,17 +132,9 @@ banana-music-controller/
 
 ---
 
-## 💡 Metodología de Desarrollo
-
-Este proyecto fue concebido y desarrollado inicialmente utilizando la metodología **Spec-Driven Development (SDD)** orquestada con **Antigravity**, garantizando una arquitectura desacoplada, estabilidad de audio garantizada y fidelidad visual con el diseño original.
-
-> 🤝 **Contribuciones:** Las contribuciones de la comunidad son bienvenidas. Para aportar código, mejoras o correcciones de bugs, **no es necesario seguir estrictamente esta metodología**; siéntete libre de abrir un *Issue* o enviar un *Pull Request* siguiendo las buenas prácticas convencionales de Git.
-
----
-
 ## 👤 Créditos y Autoría
 
-- **Desarrollador Principal:** [Patrick J. Hernandez](https://github.com/tu-usuario)
+- **Desarrollador Principal:** [Patrick J. Hernandez](https://github.com/kelevo)
 - **Diseño & Concepto:** Banana Music Controller Team
 
 ---
